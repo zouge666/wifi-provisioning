@@ -1,0 +1,34 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "wifi-provisioning"
+dynamic = ["version"]
+description = "Offline Wi-Fi provisioning for headless Linux devices: a configurator hands Wi-Fi credentials to a device over a local channel, end-to-end encrypted."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+]
+
+[tool.hatch.version]
+path = "src/wifiprov/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/wifiprov"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
