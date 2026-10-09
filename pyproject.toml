@@ -5,10 +5,12 @@ build-backend = "hatchling.build"
 [project]
 name = "wifi-provisioning"
 dynamic = ["version"]
-description = "Offline Wi-Fi provisioning for headless Linux devices: a configurator hands Wi-Fi credentials to a device over a local channel, end-to-end encrypted."
+description = "Offline Wi-Fi provisioning for headless Linux devices."
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    "cryptography>=42",
+]
 
 [dependency-groups]
 dev = [
