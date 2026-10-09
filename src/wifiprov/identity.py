@@ -21,6 +21,7 @@ from wifiprov import b64url, crockford
 from wifiprov.setup_code import SetupCode
 
 PUBLIC_KEY_LENGTH = 32
+SIGNATURE_LENGTH = 64
 FILE_VERSION = 1
 
 
