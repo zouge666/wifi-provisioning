@@ -1,0 +1,341 @@
+import asyncio
+import getpass
+import io
+import os
+import stat
+import subprocess
+import sys
+from types import SimpleNamespace
+
+import pytest
+
+from wifiprov.cli import DEMO_NETWORKS, main
+from wifiprov.device.agent import DeviceAgent
+from wifiprov.device.fake import FakeBackend
+from wifiprov.device.lockout import Lockout
+from wifiprov.identity import DeviceIdentity
+from wifiprov.setup_code import SetupCode
+from wifiprov.ticket import Ticket
+from wifiprov.transport.tcp import serve_tcp
+
+posix_only = pytest.mark.skipif(os.name != "posix", reason="relies on POSIX file modes")
+PASSWORD = "correct horse battery"
+
+
+class Terminal(io.StringIO):
+    """Standard input that looks like a person at a keyboard."""
+
+    def isatty(self):
+        return True
+
+
+async def run(*argv):
+    # The program starts its own event loop, so it runs in a thread next to the test's device.
+    return await asyncio.to_thread(main, list(argv))
+
+
+@pytest.fixture
+def identity():
+    return DeviceIdentity.generate()
+
+
+@pytest.fixture
+def ticket_file(tmp_path, identity):
+    path = tmp_path / "ticket.txt"
+    path.write_text(Ticket.from_identity(identity).to_uri() + "\n")
+    return path
+
+
+@pytest.fixture
+async def device(identity):
+    backend = FakeBackend(DEMO_NETWORKS, connected_to="Old network")
+    agent = DeviceAgent(identity, backend, receive_timeout=2.0, connect_timeout=2.0)
+    server = await serve_tcp(agent.serve, "127.0.0.1", 0)
+    yield SimpleNamespace(port=server.sockets[0].getsockname()[1], backend=backend)
+    server.close()
+    await server.wait_closed()
+
+
+def configure_args(ticket_file, device, *extra):
+    return [
+        "configure",
+        "--ticket-file",
+        str(ticket_file),
+        "--connect",
+        f"127.0.0.1:{device.port}",
+        *extra,
+    ]
+
+
+def assert_no_secrets(identity, *texts):
+    for text in texts:
+        assert PASSWORD not in text
+        assert identity.setup_code.normalized not in text
+        assert identity.setup_code.display not in text
+
+
+# ------------------------------------------------------------------------------- init
+
+
+@posix_only
+def test_init_writes_a_private_identity_and_ticket(tmp_path, capsys):
+    identity_path, ticket_path = (
+        tmp_path / "state" / "identity.json",
+        tmp_path / "state" / "ticket.txt",
+    )
+
+    assert main(["init", "--identity", str(identity_path), "--ticket-out", str(ticket_path)]) == 0
+
+    out, err = capsys.readouterr()
+    assert out == ""  # the ticket went to the file
+    assert stat.S_IMODE(identity_path.stat().st_mode) == 0o600
+    assert stat.S_IMODE(ticket_path.stat().st_mode) == 0o600
+    ticket = Ticket.from_uri(ticket_path.read_text())
+    assert ticket.public_key == DeviceIdentity.load(identity_path).public_key
+    assert ticket.device_id in err
+
+
+def test_init_prints_the_ticket_when_no_file_is_asked_for(tmp_path, capsys):
+    path = tmp_path / "identity.json"
+    assert main(["init", "--identity", str(path)]) == 0
+    out, _ = capsys.readouterr()
+    assert Ticket.from_uri(out).public_key == DeviceIdentity.load(path).public_key
+
+
+def test_init_never_overwrites_an_identity(tmp_path, capsys):
+    path = tmp_path / "identity.json"
+    assert main(["init", "--identity", str(path)]) == 0
+    before = path.read_bytes()
+    capsys.readouterr()
+
+    assert main(["init", "--identity", str(path)]) == 2
+    assert path.read_bytes() == before
+    assert "never overwritten" in capsys.readouterr().err
+
+
+# ----------------------------------------------------------------------------- device
+
+
+def test_device_refuses_to_start_without_an_identity(tmp_path, capsys):
+    assert main(["device", "--identity", str(tmp_path / "missing.json")]) == 2
+    assert "Cannot start the device" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [["--listen", "nonsense"], ["--listen", "host:99999"], ["--fake-network", "no-equals-sign"]],
+    ids=["no port", "port out of range", "fake network without a password"],
+)
+def test_device_refuses_to_start_with_bad_options(tmp_path, capsys, extra):
+    path = tmp_path / "identity.json"
+    main(["init", "--identity", str(path)])
+    capsys.readouterr()
+    assert main(["device", "--identity", str(path), *extra]) == 2
+    assert "Cannot start the device" in capsys.readouterr().err
+
+
+# -------------------------------------------------------------------------- configure
+
+
+async def test_configure_joins_a_network(device, identity, ticket_file, monkeypatch, capsys):
+    monkeypatch.setattr(sys, "stdin", io.StringIO(PASSWORD + "\n"))
+
+    code = await run(
+        *configure_args(ticket_file, device, "--ssid", "Hospital WiFi", "--password-stdin")
+    )
+
+    out, err = capsys.readouterr()
+    assert code == 0
+    assert "Connected to Hospital WiFi" in out
+    assert "10.20.0.7" in out
+    assert device.backend.connected_to == "Hospital WiFi"
+    assert_no_secrets(identity, out, err)
+
+
+async def test_a_wrong_wifi_password_is_explained_and_the_old_network_stays(
+    device, identity, ticket_file, monkeypatch, capsys
+):
+    monkeypatch.setattr(sys, "stdin", io.StringIO("not the right one\n"))
+
+    code = await run(
+        *configure_args(ticket_file, device, "--ssid", "Hospital WiFi", "--password-stdin")
+    )
+
+    out, err = capsys.readouterr()
+    assert code == 1
+    assert "did not accept the password" in err
+    assert device.backend.connected_to == "Old network"
+    assert "not the right one" not in out + err
+
+
+async def test_an_open_network_never_asks_for_a_password(device, ticket_file, monkeypatch, capsys):
+    def no_prompt(prompt=""):
+        raise AssertionError("an open network needs no password")
+
+    monkeypatch.setattr(getpass, "getpass", no_prompt)
+    code = await run(*configure_args(ticket_file, device, "--ssid", "Guest"))
+    assert code == 0
+    assert device.backend.connected_to == "Guest"
+
+
+async def test_configure_can_ask_which_network_and_ask_again_after_a_typo(
+    device, identity, ticket_file, monkeypatch, capsys
+):
+    monkeypatch.setattr(sys, "stdin", Terminal("1\n"))
+    typed = iter(["not the right one", PASSWORD])
+    monkeypatch.setattr(getpass, "getpass", lambda prompt="": next(typed))
+
+    code = await run(*configure_args(ticket_file, device))
+
+    out, err = capsys.readouterr()
+    assert code == 0
+    assert "1. Hospital WiFi" in out
+    assert "Try again." in err
+    assert device.backend.connected_to == "Hospital WiFi"
+    assert_no_secrets(identity, out, err)
+
+
+async def test_configure_gives_up_after_three_wrong_passwords(
+    device, ticket_file, monkeypatch, capsys
+):
+    monkeypatch.setattr(sys, "stdin", Terminal("1\n"))
+    attempts = []
+
+    def wrong(prompt=""):
+        attempts.append(prompt)
+        return "never the right one"
+
+    monkeypatch.setattr(getpass, "getpass", wrong)
+    assert await run(*configure_args(ticket_file, device)) == 1
+    assert len(attempts) == 3
+
+
+async def test_without_a_terminal_the_network_has_to_be_named(
+    device, ticket_file, monkeypatch, capsys
+):
+    monkeypatch.setattr(sys, "stdin", io.StringIO(""))
+    assert await run(*configure_args(ticket_file, device)) == 2
+    assert "--ssid" in capsys.readouterr().err
+
+
+async def test_a_network_the_device_cannot_see_is_reported(
+    device, ticket_file, monkeypatch, capsys
+):
+    monkeypatch.setattr(sys, "stdin", io.StringIO("whatever password\n"))
+    code = await run(*configure_args(ticket_file, device, "--ssid", "Nowhere", "--password-stdin"))
+    assert code == 1
+    assert "cannot see that network" in capsys.readouterr().err
+
+
+async def test_a_password_that_wifi_cannot_have_is_rejected_without_repeating_it(
+    device, ticket_file, monkeypatch, capsys
+):
+    monkeypatch.setattr(sys, "stdin", io.StringIO("tiny\n"))
+    code = await run(
+        *configure_args(ticket_file, device, "--ssid", "Hospital WiFi", "--password-stdin")
+    )
+    out, err = capsys.readouterr()
+    assert code == 2
+    assert "8 to 63 characters" in err
+    assert "tiny" not in out + err
+
+
+async def test_a_wrong_setup_code_is_explained(device, identity, tmp_path, monkeypatch, capsys):
+    wrong = tmp_path / "wrong.txt"
+    wrong.write_text(Ticket(identity.public_key, SetupCode.generate()).to_uri())
+    monkeypatch.setattr(sys, "stdin", io.StringIO(PASSWORD + "\n"))
+
+    code = await run(*configure_args(wrong, device, "--ssid", "Hospital WiFi", "--password-stdin"))
+
+    out, err = capsys.readouterr()
+    assert code == 3
+    assert "did not accept the setup code" in err
+    assert device.backend.connected_to == "Old network"
+    assert_no_secrets(identity, out, err)
+
+
+async def test_a_locked_device_says_how_long_to_wait(
+    identity, ticket_file, tmp_path, monkeypatch, capsys
+):
+    agent = DeviceAgent(
+        identity, FakeBackend(DEMO_NETWORKS), lockout=Lockout(max_failures=1), receive_timeout=2.0
+    )
+    server = await serve_tcp(agent.serve, "127.0.0.1", 0)
+    device = SimpleNamespace(port=server.sockets[0].getsockname()[1])
+    wrong = tmp_path / "wrong.txt"
+    wrong.write_text(Ticket(identity.public_key, SetupCode.generate()).to_uri())
+    monkeypatch.setattr(sys, "stdin", io.StringIO(PASSWORD + "\n"))
+
+    assert await run(*configure_args(wrong, device, "--ssid", "Guest")) == 3
+    capsys.readouterr()
+    assert await run(*configure_args(ticket_file, device, "--ssid", "Guest")) == 3
+    err = capsys.readouterr().err
+    assert "locked" in err
+    assert "5 minute" in err
+
+    server.close()
+    await server.wait_closed()
+
+
+async def test_a_different_device_is_called_out(device, tmp_path, capsys):
+    other = tmp_path / "other.txt"
+    other.write_text(Ticket.from_identity(DeviceIdentity.generate()).to_uri())
+    code = await run(*configure_args(other, device, "--ssid", "Guest"))
+    assert code == 3
+    assert "not the device on the sticker" in capsys.readouterr().err
+
+
+async def test_nothing_listening_is_reported(ticket_file, capsys):
+    server = await serve_tcp(lambda transport: asyncio.sleep(0), "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    server.close()
+    await server.wait_closed()
+    code = await run(
+        "configure",
+        "--ticket-file",
+        str(ticket_file),
+        "--connect",
+        f"127.0.0.1:{port}",
+        "--ssid",
+        "Guest",
+    )
+    assert code == 3
+    assert "Could not reach a device" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("ticket_text", "extra"),
+    [("hello", []), ("", []), ("wifiprov://v1/NOPE", []), (None, ["--connect", "nonsense"])],
+    ids=["not a ticket", "empty file", "truncated ticket", "bad address"],
+)
+def test_bad_input_is_exit_code_2(tmp_path, identity, capsys, ticket_text, extra):
+    path = tmp_path / "ticket.txt"
+    path.write_text(Ticket.from_identity(identity).to_uri() if ticket_text is None else ticket_text)
+    assert main(["configure", "--ticket-file", str(path), *extra]) == 2
+    assert "Cannot start" in capsys.readouterr().err
+
+
+def test_a_missing_ticket_file_is_exit_code_2(tmp_path, capsys):
+    assert main(["configure", "--ticket-file", str(tmp_path / "missing.txt")]) == 2
+    assert "Cannot start" in capsys.readouterr().err
+
+
+def test_standard_input_cannot_carry_both_the_ticket_and_the_password(capsys):
+    assert main(["configure", "--ticket-stdin", "--password-stdin"]) == 2
+    assert "not both" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("secret_option", ["--password", "--code", "--setup-code"])
+def test_secrets_cannot_be_given_on_the_command_line(secret_option):
+    with pytest.raises(SystemExit) as exit_:
+        main(["configure", secret_option, "hunter22222"])
+    assert exit_.value.code == 2
+
+
+def test_the_program_can_be_run_as_a_module():
+    result = subprocess.run(
+        [sys.executable, "-m", "wifiprov", "--help"], capture_output=True, text=True, timeout=60
+    )
+    assert result.returncode == 0
+    for command in ("init", "device", "configure"):
+        assert command in result.stdout

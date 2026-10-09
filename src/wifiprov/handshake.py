@@ -40,7 +40,11 @@ _SESSION_LABEL = b"wifiprov/v1/session"
 
 
 class HandshakeError(ValueError):
-    """A message is malformed, or the device is not the one on the sticker."""
+    """A handshake message is malformed or unusable."""
+
+
+class WrongDevice(HandshakeError):
+    """The device that answered is not the one on the sticker."""
 
 
 class SessionKeys(NamedTuple):
@@ -124,7 +128,7 @@ class ConfiguratorHandshake:
         ephemeral, self._ephemeral = self._ephemeral, None
         device_public, signature = _parse_hello(hello)
         if not verify(self._ticket.public_key, _HELLO_LABEL + device_public, signature):
-            raise HandshakeError("this is not the device on the sticker")
+            raise WrongDevice("this is not the device on the sticker")
         keyshare = bytes([MessageType.KEYSHARE]) + _public_bytes(ephemeral)
         shared = _agree(ephemeral, device_public)
         keys = derive_session_keys(

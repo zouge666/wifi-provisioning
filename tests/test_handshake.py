@@ -9,6 +9,7 @@ from wifiprov.handshake import (
     ConfiguratorHandshake,
     DeviceHandshake,
     HandshakeError,
+    WrongDevice,
     derive_session_keys,
 )
 from wifiprov.identity import DeviceIdentity
@@ -70,7 +71,7 @@ def test_every_handshake_uses_fresh_keys(identity, ticket):
 def test_a_device_that_is_not_on_the_sticker_is_refused(ticket):
     impostor = DeviceIdentity.generate()
     hello = DeviceHandshake(impostor).hello()
-    with pytest.raises(HandshakeError, match="not the device on the sticker"):
+    with pytest.raises(WrongDevice, match="not the device on the sticker"):
         ConfiguratorHandshake(ticket).accept(hello)
 
 
@@ -95,6 +96,12 @@ def test_hello_of_the_wrong_length_is_rejected(identity, ticket, length):
     hello = DeviceHandshake(identity).hello()
     with pytest.raises(HandshakeError):
         ConfiguratorHandshake(ticket).accept((hello + bytes(200))[:length])
+
+
+def test_a_malformed_hello_is_not_mistaken_for_a_wrong_device(identity, ticket):
+    with pytest.raises(HandshakeError) as error:
+        ConfiguratorHandshake(ticket).accept(b"\x01\x01")
+    assert not isinstance(error.value, WrongDevice)
 
 
 def test_an_unsupported_protocol_version_is_named_in_the_error(identity, ticket):

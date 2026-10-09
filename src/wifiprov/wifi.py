@@ -32,6 +32,23 @@ class Failure(str, Enum):
     OTHER = "other"
 
 
+_FAILURE_TEXT = {
+    Failure.NETWORK_NOT_FOUND: (
+        "The device cannot see that network. Is it in range, and is the name right?"
+    ),
+    Failure.WRONG_PASSWORD: "The network did not accept the password.",
+    Failure.NO_ADDRESS: "The device joined the network but did not get an IP address.",
+    Failure.TIMEOUT: "The network did not answer in time.",
+    Failure.UNSUPPORTED: "This kind of network is not supported.",
+    Failure.OTHER: "Something went wrong on the device.",
+}
+
+
+def describe_failure(failure: Failure) -> str:
+    """A sentence a technician can act on."""
+    return _FAILURE_TEXT[failure]
+
+
 def _check_ssid(ssid: str) -> None:
     try:
         size = len(ssid.encode("utf-8"))
