@@ -118,3 +118,27 @@ def test_keys_must_be_32_bytes(length):
         Session(bytes(length), bytes(KEY_LENGTH))
     with pytest.raises(ValueError):
         Session(bytes(KEY_LENGTH), bytes(length))
+
+
+def test_a_session_that_waits_for_the_other_side_cannot_send_first():
+    key_a, key_b = os.urandom(KEY_LENGTH), os.urandom(KEY_LENGTH)
+    device = Session(key_a, key_b, peer_speaks_first=True)
+    with pytest.raises(SessionError, match="first message"):
+        device.encrypt(b"too early")
+
+
+def test_it_may_send_once_a_message_from_the_other_side_has_authenticated():
+    key_a, key_b = os.urandom(KEY_LENGTH), os.urandom(KEY_LENGTH)
+    device = Session(key_a, key_b, peer_speaks_first=True)
+    configurator = Session(key_b, key_a)
+    device.decrypt(configurator.encrypt(b"hello"))
+    assert configurator.decrypt(device.encrypt(b"welcome")) == b"welcome"
+
+
+def test_a_message_that_fails_authentication_does_not_unlock_sending():
+    key_a, key_b = os.urandom(KEY_LENGTH), os.urandom(KEY_LENGTH)
+    device = Session(key_a, key_b, peer_speaks_first=True)
+    with pytest.raises(SessionError):
+        device.decrypt(b"\x03" + bytes(40))
+    with pytest.raises(SessionError, match="first message"):
+        device.encrypt(b"still too early")

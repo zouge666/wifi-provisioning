@@ -43,6 +43,14 @@ def test_both_sides_end_up_with_a_working_channel(identity, ticket):
     assert configurator_session.decrypt(device_session.encrypt(b"connected")) == b"connected"
 
 
+def test_the_device_cannot_speak_before_the_configurator_has(identity, ticket):
+    _, _, device_session, configurator_session = run_handshake(identity, ticket)
+    with pytest.raises(SessionError, match="first message"):
+        device_session.encrypt(b"ready")
+    device_session.decrypt(configurator_session.encrypt(b"hello"))
+    assert configurator_session.decrypt(device_session.encrypt(b"ready")) == b"ready"
+
+
 def test_message_sizes_and_types(identity, ticket):
     hello, keyshare, _, _ = run_handshake(identity, ticket)
     assert len(hello) == HELLO_LENGTH == 98
@@ -101,8 +109,10 @@ def test_a_wrong_setup_code_leaves_the_two_sides_unable_to_talk(identity):
     _, _, device_session, configurator_session = run_handshake(identity, wrong_ticket)
     with pytest.raises(SessionError):
         device_session.decrypt(configurator_session.encrypt(b"wifi password"))
-    with pytest.raises(SessionError):
-        configurator_session.decrypt(device_session.encrypt(b"connected"))
+    # The device has nothing to say to someone who has not proved the code. Any reply
+    # would let a guesser check codes offline, so the session will not produce one.
+    with pytest.raises(SessionError, match="first message"):
+        device_session.encrypt(b"connected")
 
 
 def test_a_tampered_key_share_leaves_the_two_sides_unable_to_talk(identity, ticket):

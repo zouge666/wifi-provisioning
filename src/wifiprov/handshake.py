@@ -102,8 +102,11 @@ class DeviceHandshake:
         keys = derive_session_keys(
             shared, self._identity.setup_code, self._identity.public_key, self._hello, keyshare
         )
+        # The configurator must speak first: see Session for why.
         return Session(
-            send_key=keys.device_to_configurator, receive_key=keys.configurator_to_device
+            send_key=keys.device_to_configurator,
+            receive_key=keys.configurator_to_device,
+            peer_speaks_first=True,
         )
 
 
