@@ -7,6 +7,7 @@ hidden prompt.
 
 Exit codes: 0 joined the network, 1 did not join it, 2 bad input, 3 the device
 refused, did not answer or is not the one on the sticker.
+The scan command exits with 0 when it listed the networks and 1 when it could not.
 """
 
 from __future__ import annotations
@@ -30,6 +31,7 @@ from wifiprov.configurator.client import (
 )
 from wifiprov.device.agent import DeviceAgent
 from wifiprov.device.fake import FakeBackend, FakeNetwork
+from wifiprov.device.networkmanager import NetworkManagerBackend, NetworkManagerError
 from wifiprov.identity import DeviceIdentity, IdentityError
 from wifiprov.secret import Secret
 from wifiprov.ticket import Ticket, TicketError
@@ -41,6 +43,7 @@ EXIT_JOINED = 0
 EXIT_NOT_JOINED = 1
 EXIT_BAD_INPUT = 2
 EXIT_NO_DEVICE = 3
+EXIT_SCAN_FAILED = 1
 
 DEFAULT_ADDRESS = "127.0.0.1:8765"
 DEMO_NETWORKS = {
@@ -108,6 +111,12 @@ def _build_parser() -> argparse.ArgumentParser:
         "--timeout", type=float, default=30.0, help="seconds to wait for the device"
     )
     configure.set_defaults(run=_run_configure)
+
+    scan = commands.add_parser("scan", help="list the Wi-Fi networks this machine can see")
+    scan.add_argument(
+        "--interface", metavar="NAME", help="the Wi-Fi adapter; by default the first one"
+    )
+    scan.set_defaults(run=_run_scan)
     return parser
 
 
@@ -311,3 +320,27 @@ def _parse_address(text: str) -> tuple[str, int]:
     if not separator or not host or not port.isdigit() or not 0 <= int(port) <= 65535:
         raise ValueError(f"an address looks like HOST:PORT, not {text!r}")
     return host, int(port)
+
+
+# ----------------------------------------------------------------------------- scan
+
+
+def _run_scan(args: argparse.Namespace) -> int:
+    return asyncio.run(_scan(NetworkManagerBackend(args.interface)))
+
+
+async def _scan(backend: NetworkManagerBackend) -> int:
+    try:
+        status = await backend.status()
+        networks = await backend.scan()
+    except NetworkManagerError as error:
+        print(f"Cannot read the Wi-Fi adapter: {error}", file=sys.stderr)
+        return EXIT_SCAN_FAILED
+    if status.connected:
+        print(f"Adapter {status.interface} is connected to {status.connection} ({status.ip})")
+    else:
+        print(f"Adapter {status.interface} is not connected")
+    print("Networks in range, strongest first:")
+    for number, network in enumerate(networks, start=1):
+        print(f"  {number}. {network.ssid}  (signal {network.signal}, {network.security.value})")
+    return EXIT_JOINED

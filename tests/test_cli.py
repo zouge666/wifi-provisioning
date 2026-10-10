@@ -13,10 +13,12 @@ from wifiprov.cli import DEMO_NETWORKS, main
 from wifiprov.device.agent import DeviceAgent
 from wifiprov.device.fake import FakeBackend
 from wifiprov.device.lockout import Lockout
+from wifiprov.device.networkmanager import NetworkManagerError, WifiStatus
 from wifiprov.identity import DeviceIdentity
 from wifiprov.setup_code import SetupCode
 from wifiprov.ticket import Ticket
 from wifiprov.transport.tcp import serve_tcp
+from wifiprov.wifi import Security, WifiNetwork
 
 posix_only = pytest.mark.skipif(os.name != "posix", reason="relies on POSIX file modes")
 PASSWORD = "correct horse battery"
@@ -337,5 +339,64 @@ def test_the_program_can_be_run_as_a_module():
         [sys.executable, "-m", "wifiprov", "--help"], capture_output=True, text=True, timeout=60
     )
     assert result.returncode == 0
-    for command in ("init", "device", "configure"):
+    for command in ("init", "device", "configure", "scan"):
         assert command in result.stdout
+
+
+# ------------------------------------------------------------------------------- scan
+
+
+class FakeNetworkManager:
+    def __init__(self, interface=None):
+        self.interface = interface
+
+    async def status(self):
+        return WifiStatus("wlp2s0", 100, "Hospital", "10.20.0.7")
+
+    async def scan(self):
+        return [
+            WifiNetwork("Hospital", 80, Security.WPA_PSK),
+            WifiNetwork("Guest", 40, Security.OPEN),
+        ]
+
+
+def test_scan_lists_the_networks_the_machine_can_see(monkeypatch, capsys):
+    monkeypatch.setattr("wifiprov.cli.NetworkManagerBackend", FakeNetworkManager)
+    assert main(["scan"]) == 0
+    out, _ = capsys.readouterr()
+    assert "Adapter wlp2s0 is connected to Hospital (10.20.0.7)" in out
+    assert "1. Hospital  (signal 80, wpa-psk)" in out
+    assert "2. Guest  (signal 40, open)" in out
+
+
+def test_scan_says_so_when_the_adapter_is_not_connected(monkeypatch, capsys):
+    class NotConnected(FakeNetworkManager):
+        async def status(self):
+            return WifiStatus("wlp2s0", 30, None, None)
+
+    monkeypatch.setattr("wifiprov.cli.NetworkManagerBackend", NotConnected)
+    assert main(["scan"]) == 0
+    assert "Adapter wlp2s0 is not connected" in capsys.readouterr().out
+
+
+def test_scan_passes_the_adapter_name_on(monkeypatch):
+    seen = []
+
+    class Recording(FakeNetworkManager):
+        def __init__(self, interface=None):
+            seen.append(interface)
+
+    monkeypatch.setattr("wifiprov.cli.NetworkManagerBackend", Recording)
+    assert main(["scan", "--interface", "wlan7"]) == 0
+    assert main(["scan"]) == 0
+    assert seen == ["wlan7", None]
+
+
+def test_scan_says_why_it_could_not_read_the_adapter(monkeypatch, capsys):
+    class Broken(FakeNetworkManager):
+        async def status(self):
+            raise NetworkManagerError("NetworkManager sees no Wi-Fi adapter")
+
+    monkeypatch.setattr("wifiprov.cli.NetworkManagerBackend", Broken)
+    assert main(["scan"]) == 1
+    assert "no Wi-Fi adapter" in capsys.readouterr().err
