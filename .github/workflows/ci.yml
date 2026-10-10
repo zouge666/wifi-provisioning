@@ -1,0 +1,42 @@
+name: CI
+
+# Run on every push to main and on every pull request.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# The job only reads the code, it never writes to the repository.
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    # Stop the job if a test hangs.
+    timeout-minutes: 10
+    strategy:
+      # Let both Python versions finish, even if one of them fails.
+      fail-fast: false
+      matrix:
+        # 3.10 is the oldest version we support, 3.12 is the one we develop on.
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # --locked fails the job if uv.lock does not match pyproject.toml.
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Check formatting
+        run: uv run ruff format --check .
+
+      - name: Run tests
+        run: uv run pytest

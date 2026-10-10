@@ -10,6 +10,7 @@ Requires [uv](https://docs.astral.sh/uv/). Supports Python 3.10 and newer.
 uv sync
 uv run pytest
 uv run ruff check .
+uv run ruff format --check .
 ```
 
 ## Local demo
