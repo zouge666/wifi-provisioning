@@ -47,8 +47,36 @@ class NetworkList:
             raise ValueError(f"a network list has at most {MAX_NETWORKS} entries")
 
 
-Request = ScanRequest | ProvisionRequest
-Response = NetworkList | ConnectResult
+@dataclass(frozen=True)
+class StatusRequest:
+    """Configurator to device: how did the last attempt to join a network go?"""
+
+
+@dataclass(frozen=True)
+class ProvisionAccepted:
+    """Device to configurator: I have the Wi-Fi details and I am going to try them now.
+
+    Joining may mean leaving the network the device talks to the configurator on, so the
+    link can be gone before the result is sent.
+    """
+
+
+@dataclass(frozen=True)
+class Status:
+    """Device to configurator: the last attempt to join a network. No ssid means no attempt."""
+
+    ssid: str | None = None
+    result: ConnectResult | None = None
+
+    def __post_init__(self) -> None:
+        if (self.ssid is None) != (self.result is None):
+            raise ValueError("a status has both the network name and the result, or neither")
+        if self.ssid is not None:
+            WifiCredentials(self.ssid)  # checks the name
+
+
+Request = ScanRequest | ProvisionRequest | StatusRequest
+Response = NetworkList | ConnectResult | ProvisionAccepted | Status
 
 
 def encode(message: Request | Response) -> bytes:
@@ -56,6 +84,8 @@ def encode(message: Request | Response) -> bytes:
     document: dict[str, Any]
     if isinstance(message, ScanRequest):
         document = {"type": "scan"}
+    elif isinstance(message, StatusRequest):
+        document = {"type": "status"}
     elif isinstance(message, ProvisionRequest):
         document = {"type": "provision", "ssid": message.credentials.ssid}
         if message.credentials.password is not None:
@@ -68,12 +98,15 @@ def encode(message: Request | Response) -> bytes:
                 for network in message.networks
             ],
         }
+    elif isinstance(message, ProvisionAccepted):
+        document = {"type": "accepted"}
     elif isinstance(message, ConnectResult):
-        document = {"type": "result", "connected": message.connected}
-        if message.failure is not None:
-            document["failure"] = message.failure.value
-        if message.ip is not None:
-            document["ip"] = message.ip
+        document = {"type": "result", **_result_fields(message)}
+    elif isinstance(message, Status):
+        document = {"type": "last_attempt"}
+        if message.result is not None:
+            document["ssid"] = message.ssid
+            document.update(_result_fields(message.result))
     else:
         raise TypeError(f"cannot encode {type(message).__name__}")
     return json.dumps(document, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
@@ -86,6 +119,9 @@ def decode_request(data: bytes) -> Request:
     if kind == "scan":
         _expect_keys(document, {"type"})
         return ScanRequest()
+    if kind == "status":
+        _expect_keys(document, {"type"})
+        return StatusRequest()
     if kind == "provision":
         _expect_keys(document, {"type", "ssid"}, optional={"password"})
         password = None
@@ -111,19 +147,46 @@ def decode_response(data: bytes) -> Response:
             return NetworkList(tuple(_network(entry) for entry in entries))
         except ValueError:
             raise MessageError("the network list is not valid") from None
+    if kind == "accepted":
+        _expect_keys(document, {"type"})
+        return ProvisionAccepted()
     if kind == "result":
-        connected = document.get("connected")
-        if type(connected) is not bool:
-            raise MessageError("connected must be true or false")
+        return _read_result(document)
+    if kind == "last_attempt":
+        if set(document) == {"type"}:
+            return Status()
+        if "ssid" not in document:
+            raise MessageError("unexpected or missing fields")
+        rest = {key: value for key, value in document.items() if key not in ("type", "ssid")}
+        result = _read_result({"type": "result", **rest})
         try:
-            if connected:
-                _expect_keys(document, {"type", "connected"}, optional={"ip"})
-                return ConnectResult(True, ip=_ip(document.get("ip")))
-            _expect_keys(document, {"type", "connected", "failure"})
-            return ConnectResult(False, Failure(_text(document["failure"])))
+            return Status(_text(document["ssid"]), result)
         except ValueError:
-            raise MessageError("the result is not valid") from None
+            raise MessageError("the status is not valid") from None
     raise MessageError("unknown response")
+
+
+def _result_fields(result: ConnectResult) -> dict[str, Any]:
+    fields: dict[str, Any] = {"connected": result.connected}
+    if result.failure is not None:
+        fields["failure"] = result.failure.value
+    if result.ip is not None:
+        fields["ip"] = result.ip
+    return fields
+
+
+def _read_result(document: dict[str, Any]) -> ConnectResult:
+    connected = document.get("connected")
+    if type(connected) is not bool:
+        raise MessageError("connected must be true or false")
+    try:
+        if connected:
+            _expect_keys(document, {"type", "connected"}, optional={"ip"})
+            return ConnectResult(True, ip=_ip(document.get("ip")))
+        _expect_keys(document, {"type", "connected", "failure"})
+        return ConnectResult(False, Failure(_text(document["failure"])))
+    except ValueError:
+        raise MessageError("the result is not valid") from None
 
 
 def _load(data: bytes) -> dict[str, Any]:

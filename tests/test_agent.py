@@ -9,7 +9,14 @@ from wifiprov.device.fake import FakeBackend, FakeNetwork
 from wifiprov.device.lockout import Lockout
 from wifiprov.handshake import ConfiguratorHandshake
 from wifiprov.identity import DeviceIdentity
-from wifiprov.messages import NetworkList, ProvisionRequest, ScanRequest
+from wifiprov.messages import (
+    NetworkList,
+    ProvisionAccepted,
+    ProvisionRequest,
+    ScanRequest,
+    Status,
+    StatusRequest,
+)
 from wifiprov.secret import Secret
 from wifiprov.setup_code import SetupCode
 from wifiprov.ticket import Ticket
@@ -50,6 +57,12 @@ class Phone:
 
     async def ask(self, message):
         await self.say(message)
+        return await self.hear()
+
+    async def join(self, request):
+        """Join a network: the device first says it has the details, then how it went."""
+        await self.say(request)
+        assert await self.hear() == ProvisionAccepted()
         return await self.hear()
 
 
@@ -107,7 +120,7 @@ async def test_a_configurator_can_scan_and_then_join_a_network(agent, backend, t
     assert isinstance(listing, NetworkList)
     assert [network.ssid for network in listing.networks] == [SSID, "Ward 3", "No DHCP", "Guest"]
 
-    result = await phone.ask(join())
+    result = await phone.join(join())
     assert result == ConnectResult(True, ip="10.20.0.7")
 
     assert await task is Outcome.CONNECTED
@@ -121,7 +134,7 @@ async def test_an_open_network_can_be_joined_without_a_password(agent, backend, 
     phone_end, _, task = connect(agent)
     phone = Phone(ticket, phone_end)
     await phone.handshake()
-    assert (await phone.ask(join("Guest", None))).connected
+    assert (await phone.join(join("Guest", None))).connected
     assert await task is Outcome.CONNECTED
     assert backend.connected_to == "Guest"
 
@@ -130,7 +143,7 @@ async def test_joining_can_be_the_very_first_request(agent, backend, ticket):
     phone_end, _, task = connect(agent)
     phone = Phone(ticket, phone_end)
     await phone.handshake()
-    assert (await phone.ask(join())).connected
+    assert (await phone.join(join())).connected
     assert await task is Outcome.CONNECTED
 
 
@@ -155,13 +168,13 @@ async def test_a_wrong_password_is_reported_and_the_device_keeps_its_old_network
     phone = Phone(ticket, phone_end)
     await phone.handshake()
 
-    result = await phone.ask(join(password="not the right one"))
+    result = await phone.join(join(password="not the right one"))
     assert result == ConnectResult(False, Failure.WRONG_PASSWORD)
     assert backend.connected_to == "Old network"
     assert agent.state is State.READY
 
     # The technician types it again, in the same conversation.
-    assert (await phone.ask(join())).connected
+    assert (await phone.join(join())).connected
     assert await task is Outcome.CONNECTED
     assert backend.connected_to == SSID
 
@@ -180,7 +193,7 @@ async def test_each_failure_reason_reaches_the_configurator(
     phone_end, _, task = connect(agent)
     phone = Phone(ticket, phone_end)
     await phone.handshake()
-    assert await phone.ask(request_) == ConnectResult(False, failure)
+    assert await phone.join(request_) == ConnectResult(False, failure)
     assert backend.connected_to == "Old network"
     await phone_end.close()
     assert await task is Outcome.FAILED
@@ -193,7 +206,7 @@ async def test_a_connection_that_takes_too_long_is_reported_as_a_timeout(identit
     phone = Phone(ticket, phone_end)
     await phone.handshake()
 
-    assert await phone.ask(join()) == ConnectResult(False, Failure.TIMEOUT)
+    assert await phone.join(join()) == ConnectResult(False, Failure.TIMEOUT)
     assert backend.connected_to == "Old network"
     await phone_end.close()
     assert await task is Outcome.FAILED
@@ -212,8 +225,8 @@ async def test_the_state_shows_when_the_device_is_joining_a_network(identity, ti
     assert agent.state is State.READY
 
     await phone.say(join())
-    await asyncio.sleep(0.05)
-    assert agent.state is State.APPLYING
+    assert await phone.hear() == ProvisionAccepted()
+    assert agent.state is State.APPLYING  # the join is still going on
 
     hold.set()
     assert (await phone.hear()).connected
@@ -272,7 +285,7 @@ async def test_the_lock_ends_after_its_time_and_the_right_code_gets_in(
     phone_end, _, task = connect(agent)
     phone = Phone(ticket, phone_end)
     await phone.handshake()
-    assert (await phone.ask(join())).connected
+    assert (await phone.join(join())).connected
     assert await task is Outcome.CONNECTED
 
 
@@ -376,7 +389,7 @@ async def test_a_crashing_backend_does_not_take_the_agent_down_or_leak_the_passw
     await phone.handshake()
 
     with caplog.at_level(logging.DEBUG):
-        assert await phone.ask(join()) == ConnectResult(False, Failure.OTHER)
+        assert await phone.join(join()) == ConnectResult(False, Failure.OTHER)
         await phone_end.close()
         await task
 
@@ -389,9 +402,64 @@ async def test_the_network_name_and_password_never_appear_on_the_wire(agent, tic
     phone = Phone(ticket, phone_end)
     await phone.handshake()
     await phone.ask(ScanRequest())
-    assert (await phone.ask(join())).connected
+    assert (await phone.join(join())).connected
     await task
 
     everything = b"".join(phone_end.sent + device_end.sent)
     assert PASSWORD.encode() not in everything
     assert SSID.encode() not in everything
+
+
+async def test_the_device_remembers_the_last_attempt_and_can_be_asked(agent, ticket):
+    phone_end, _, task = connect(agent)
+    phone = Phone(ticket, phone_end)
+    await phone.handshake()
+    assert await phone.ask(StatusRequest()) == Status()  # nothing was tried yet
+
+    await phone.join(join(password="not the right one"))
+    failed = Status(SSID, ConnectResult(False, Failure.WRONG_PASSWORD))
+    assert await phone.ask(StatusRequest()) == failed
+
+    await phone.join(join())
+    assert await task is Outcome.CONNECTED
+
+    # A later conversation, for example after the phone has come back.
+    phone_end, _, task = connect(agent)
+    phone = Phone(ticket, phone_end)
+    await phone.handshake()
+    assert await phone.ask(StatusRequest()) == Status(SSID, ConnectResult(True, ip="10.20.0.7"))
+    await phone_end.close()
+    await task
+
+
+async def test_when_joining_cuts_the_link_the_conversation_ends_after_a_failed_attempt(
+    identity, ticket, clock
+):
+    backend = FakeBackend(NETWORKS, connected_to="Old network", drops_link=True)
+    agent = make_agent(identity, backend, clock)
+    phone_end, _, task = connect(agent)
+    phone = Phone(ticket, phone_end)
+    await phone.handshake()
+
+    result = await phone.join(join(password="not the right one"))
+    assert result == ConnectResult(False, Failure.WRONG_PASSWORD)
+    assert await task is Outcome.FAILED  # nobody had to hang up first
+    assert agent.state is State.IDLE
+
+    # The phone comes back and finds the device free, with the result kept.
+    phone_end, _, task = connect(agent)
+    phone = Phone(ticket, phone_end)
+    await phone.handshake()
+    status = await phone.ask(StatusRequest())
+    assert status == Status(SSID, ConnectResult(False, Failure.WRONG_PASSWORD))
+    await phone_end.close()
+    await task
+
+
+async def test_a_join_that_works_is_still_a_success_when_it_cuts_the_link(identity, ticket, clock):
+    backend = FakeBackend(NETWORKS, connected_to="Old network", drops_link=True)
+    phone_end, _, task = connect(make_agent(identity, backend, clock))
+    phone = Phone(ticket, phone_end)
+    await phone.handshake()
+    assert (await phone.join(join())).connected
+    assert await task is Outcome.CONNECTED

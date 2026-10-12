@@ -13,7 +13,15 @@ from types import TracebackType
 
 from wifiprov import messages
 from wifiprov.handshake import ConfiguratorHandshake, HandshakeError, WrongDevice
-from wifiprov.messages import MessageError, NetworkList, ProvisionRequest, ScanRequest
+from wifiprov.messages import (
+    MessageError,
+    NetworkList,
+    ProvisionAccepted,
+    ProvisionRequest,
+    ScanRequest,
+    Status,
+    StatusRequest,
+)
 from wifiprov.session import Session, SessionError
 from wifiprov.ticket import Ticket
 from wifiprov.transport.base import Transport, TransportClosed
@@ -105,23 +113,47 @@ class Configurator:
             raise ProtocolProblem("the device answered a scan with something else")
         return list(reply.networks)
 
-    async def join(self, credentials: WifiCredentials) -> ConnectResult:
-        """Ask the device to join a network. A failed attempt can simply be tried again."""
+    async def join(self, credentials: WifiCredentials) -> ConnectResult | None:
+        """Ask the device to join a network. A failed attempt can simply be tried again.
+
+        The result is None when the device took the details but the link went away before
+        it could say how it went. That is normal when the two talk over the device's own
+        Wi-Fi network, because the device leaves that network to join the other one. Use
+        ``status`` after the device is reachable again.
+        """
         if not self._confirmed:
             await self.scan()
-        reply = await self._ask(ProvisionRequest(credentials), self._join_timeout)
-        if not isinstance(reply, ConnectResult):
+        accepted = await self._ask(ProvisionRequest(credentials), self._timeout)
+        if not isinstance(accepted, ProvisionAccepted):
             raise ProtocolProblem("the device answered a join request with something else")
+        try:
+            result = await self._read_reply(self._join_timeout)
+        except DeviceUnreachable:
+            return None
+        if not isinstance(result, ConnectResult):
+            raise ProtocolProblem("the device answered a join request with something else")
+        return result
+
+    async def status(self) -> Status:
+        """How the last attempt to join a network went, as the device remembers it."""
+        reply = await self._ask(StatusRequest(), self._timeout)
+        if not isinstance(reply, Status):
+            raise ProtocolProblem("the device answered a status request with something else")
         return reply
 
     async def close(self) -> None:
         with contextlib.suppress(TransportClosed):
             await self._transport.close()
 
-    async def _ask(self, request: ScanRequest | ProvisionRequest, timeout: float):
+    async def _ask(self, request: ScanRequest | ProvisionRequest | StatusRequest, timeout: float):
         if self._session is None:
             raise RuntimeError("call open() before sending requests")
         await self._send(self._session.encrypt(messages.encode(request)))
+        return await self._read_reply(timeout)
+
+    async def _read_reply(self, timeout: float):
+        if self._session is None:
+            raise RuntimeError("call open() before sending requests")
         data = await self._receive(timeout)
         if data[:1] == _REJECT:
             raise _refusal(data)

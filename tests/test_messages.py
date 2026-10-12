@@ -8,8 +8,11 @@ from wifiprov.messages import (
     MAX_NETWORKS,
     MessageError,
     NetworkList,
+    ProvisionAccepted,
     ProvisionRequest,
     ScanRequest,
+    Status,
+    StatusRequest,
     decode_request,
     decode_response,
     encode,
@@ -27,6 +30,7 @@ NETWORKS = NetworkList(
     "message",
     [
         ScanRequest(),
+        StatusRequest(),
         PROVISION,
         ProvisionRequest(WifiCredentials("Open cafe")),
         ProvisionRequest(WifiCredentials("Café ☕", Secret("pass word 123"))),
@@ -41,6 +45,10 @@ def test_requests_round_trip(message):
     [
         NETWORKS,
         NetworkList(()),
+        ProvisionAccepted(),
+        Status(),
+        Status("Hospital", ConnectResult(True, ip="10.0.0.2")),
+        *[Status("Café ☕", ConnectResult(False, failure)) for failure in Failure],
         ConnectResult(True, ip="192.168.1.50"),
         ConnectResult(True),
         ConnectResult(True, ip="2001:db8::1"),
@@ -70,6 +78,15 @@ def test_the_wire_format_is_compact_json_with_a_type():
     assert encode(ConnectResult(False, Failure.WRONG_PASSWORD)) == (
         b'{"type":"result","connected":false,"failure":"wrong_password"}'
     )
+    assert encode(StatusRequest()) == b'{"type":"status"}'
+    assert encode(ProvisionAccepted()) == b'{"type":"accepted"}'
+    assert encode(Status()) == b'{"type":"last_attempt"}'
+    assert encode(Status("Hospital", ConnectResult(False, Failure.TIMEOUT))) == (
+        b'{"type":"last_attempt","ssid":"Hospital","connected":false,"failure":"timeout"}'
+    )
+    assert encode(Status("Hospital", ConnectResult(True, ip="10.0.0.2"))) == (
+        b'{"type":"last_attempt","ssid":"Hospital","connected":true,"ip":"10.0.0.2"}'
+    )
 
 
 def test_a_full_list_of_networks_fits_in_one_message():
@@ -97,6 +114,7 @@ BAD_REQUESTS = {
     "unknown type": b'{"type":"reboot"}',
     "a response, not a request": encode(NETWORKS),
     "extra field on scan": b'{"type":"scan","extra":1}',
+    "extra field on status": b'{"type":"status","extra":1}',
     "repeated key": b'{"type":"scan","type":"scan"}',
     "not a number": b'{"type":"provision","ssid":"Hospital","password":NaN}',
     "no ssid": b'{"type":"provision"}',
@@ -155,6 +173,13 @@ BAD_RESPONSES = {
     "address is not an address": b'{"type":"result","connected":true,"ip":"not an address"}',
     "address in another spelling": b'{"type":"result","connected":true,"ip":"::FFFF:1.2.3.4"}',
     "address is a number": b'{"type":"result","connected":true,"ip":3232235777}',
+    "accepted with a field": b'{"type":"accepted","ssid":"Hospital"}',
+    "last attempt with a name only": b'{"type":"last_attempt","ssid":"Hospital"}',
+    "last attempt with a result only": b'{"type":"last_attempt","connected":true}',
+    "last attempt with an empty name": b'{"type":"last_attempt","ssid":"","connected":true}',
+    "last attempt with a name that is not text": b'{"type":"last_attempt","ssid":5,"connected":true}',
+    "last attempt that failed without a reason": b'{"type":"last_attempt","ssid":"Hospital","connected":false}',
+    "last attempt with an extra field": b'{"type":"last_attempt","ssid":"Hospital","connected":true,"x":1}',
 }
 
 
@@ -167,3 +192,13 @@ def test_decode_response_rejects_bad_input(data):
 def test_module_exposes_the_documented_limits():
     assert messages.MAX_MESSAGE_BYTES == 4096
     assert messages.MAX_NETWORKS == 32
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [("Hospital", None), (None, ConnectResult(True)), ("", ConnectResult(True))],
+    ids=["a name without a result", "a result without a name", "an empty name"],
+)
+def test_a_status_has_a_name_and_a_result_or_neither(arguments):
+    with pytest.raises(ValueError):
+        Status(*arguments)

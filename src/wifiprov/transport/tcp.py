@@ -1,11 +1,11 @@
-"""Messages over a TCP connection, for trying things out on one machine or one network.
+"""Messages over a TCP connection.
 
 TCP is a stream of bytes with no message boundaries, so every message is sent as
 a 4-byte length followed by the message itself.
 
-This transport needs the two sides to share a network, which the real flow must
-not rely on. It exists so the device and the configurator can run as separate
-programs before any radio is involved.
+The two sides need a network between them. On a device that is the Wi-Fi network the
+device makes itself while its window is open. On one machine it can be the loopback
+address, which is how the local demo and the tests run.
 """
 
 from __future__ import annotations

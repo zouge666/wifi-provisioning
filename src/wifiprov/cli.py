@@ -6,7 +6,8 @@ standard input, and the sticker ticket is read from a file, standard input or a
 hidden prompt.
 
 Exit codes: 0 joined the network, 1 did not join it, 2 bad input, 3 the device
-refused, did not answer or is not the one on the sticker.
+refused, did not answer or is not the one on the sticker, 4 the device took the Wi-Fi
+details but went away before it could say how it went.
 The scan command exits with 0 when it listed the networks and 1 when it could not.
 """
 
@@ -30,9 +31,10 @@ from wifiprov.configurator.client import (
     NotTheExpectedDevice,
     ProvisioningError,
 )
+from wifiprov.device.accesspoint import AccessPointBackend
 from wifiprov.device.agent import DeviceAgent, Outcome
 from wifiprov.device.fake import FakeBackend, FakeNetwork
-from wifiprov.device.networkmanager import NetworkManagerBackend, NetworkManagerError
+from wifiprov.device.networkmanager import AP_PROFILE, NetworkManagerBackend, NetworkManagerError
 from wifiprov.device.window import Window
 from wifiprov.identity import DeviceIdentity, IdentityError
 from wifiprov.secret import Secret
@@ -47,6 +49,7 @@ EXIT_NOT_JOINED = 1
 EXIT_BAD_INPUT = 2
 EXIT_NO_DEVICE = 3
 EXIT_SCAN_FAILED = 1
+EXIT_UNKNOWN = 4
 
 DEFAULT_ADDRESS = "127.0.0.1:8765"
 DEMO_NETWORKS = {
@@ -56,6 +59,7 @@ DEMO_NETWORKS = {
 }
 MAX_PASSWORD_PROMPTS = 3
 NETWORK_WAIT = 30.0  # seconds a device waits for its network after a start
+AP_CONNECT_TIMEOUT = 150.0  # joining from the access point also closes and reopens it
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -106,6 +110,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="listen only this long, and only while the device has no network; 0 means always",
     )
     device.add_argument(
+        "--access-point",
+        action="store_true",
+        help="talk to configurators over a Wi-Fi network the device makes itself; "
+        "needs --backend nm and --window, and only the port of --listen is used",
+    )
+    device.add_argument(
         "--fake-network",
         action="append",
         metavar="NAME=PASSWORD",
@@ -133,6 +143,22 @@ def _build_parser() -> argparse.ArgumentParser:
         "--timeout", type=float, default=30.0, help="seconds to wait for the device"
     )
     configure.set_defaults(run=_run_configure)
+
+    status = commands.add_parser(
+        "status", help="ask a device how its last attempt to join a network went"
+    )
+    status.add_argument("--connect", default=DEFAULT_ADDRESS, metavar="HOST:PORT")
+    status_source = status.add_mutually_exclusive_group()
+    status_source.add_argument(
+        "--ticket-file", metavar="FILE", help="file holding the sticker ticket"
+    )
+    status_source.add_argument(
+        "--ticket-stdin", action="store_true", help="read the ticket from the first line of stdin"
+    )
+    status.add_argument(
+        "--timeout", type=float, default=30.0, help="seconds to wait for the device"
+    )
+    status.set_defaults(run=_run_status)
 
     scan = commands.add_parser("scan", help="list the Wi-Fi networks this machine can see")
     scan.add_argument(
@@ -207,13 +233,15 @@ def _run_device(args: argparse.Namespace) -> int:
         identity = DeviceIdentity.load(args.identity)
         host, port = _parse_address(args.listen)
         backend = _device_backend(args)
+        if args.access_point and (args.backend != "nm" or args.window <= 0):
+            raise ValueError("--access-point needs --backend nm and a --window")
     except (OSError, IdentityError, ValueError) as error:
         print(f"Cannot start the device: {error}", file=sys.stderr)
         return EXIT_BAD_INPUT
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     with contextlib.suppress(AttributeError):  # show output at once, even when redirected
         sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]
-    asyncio.run(_serve_device(identity, backend, host, port, args.window))
+    asyncio.run(_serve_device(identity, backend, host, port, args.window, args.access_point))
     return EXIT_JOINED
 
 
@@ -223,7 +251,13 @@ async def _serve_device(
     host: str,
     port: int,
     window_seconds: float,
+    access_point: bool = False,
 ) -> None:
+    if access_point and isinstance(backend, NetworkManagerBackend):
+        wifi = AccessPointBackend(backend, f"wifiprov-{identity.device_id}")
+        agent = DeviceAgent(identity, wifi, connect_timeout=AP_CONNECT_TIMEOUT)
+        await _serve_in_windows(identity, agent, backend, host, port, window_seconds, wifi)
+        return
     agent = DeviceAgent(identity, backend)
     if window_seconds > 0:
         await _serve_in_windows(identity, agent, backend, host, port, window_seconds)
@@ -251,6 +285,7 @@ async def _serve_in_windows(
     host: str,
     port: int,
     seconds: float,
+    access_point: AccessPointBackend | None = None,
 ) -> None:
     async def handle(transport: Transport) -> None:
         if await agent.serve(transport) is Outcome.CONNECTED:
@@ -259,9 +294,17 @@ async def _serve_in_windows(
     async def has_network() -> bool:
         return await _has_network(backend)
 
-    window = Window(
-        lambda: serve_tcp(handle, host, port), has_network, seconds=seconds, grace=NETWORK_WAIT
-    )
+    async def open_channel() -> _Listener:
+        if access_point is None:
+            return _Listener(await serve_tcp(handle, host, port))
+        address = await access_point.start()
+        try:
+            return _Listener(await serve_tcp(handle, address, port), access_point)
+        except OSError:
+            await access_point.stop()
+            raise
+
+    window = Window(open_channel, has_network, seconds=seconds, grace=NETWORK_WAIT)
     reopen = asyncio.Event()
     # SIGUSR1 opens the window again. It stands in for a button on the device.
     with contextlib.suppress(NotImplementedError):
@@ -287,7 +330,23 @@ async def _has_network(backend: FakeBackend | NetworkManagerBackend) -> bool:
         status = await backend.status()
     except NetworkManagerError:
         return False
-    return status.connected and status.ip is not None
+    # The access point is a connection with an address too, but it is not a network to be on.
+    return status.connected and status.ip is not None and status.connection != AP_PROFILE
+
+
+class _Listener:
+    """The way in while the window is open: a server, and the access point under it if any."""
+
+    def __init__(
+        self, server: asyncio.Server, access_point: AccessPointBackend | None = None
+    ) -> None:
+        self._server = server
+        self._access_point = access_point
+
+    async def close(self) -> None:
+        self._server.close()
+        if self._access_point is not None:
+            await self._access_point.stop()
 
 
 def _fake_backend(secured: list[str] | None, open_networks: list[str] | None) -> FakeBackend:
@@ -362,6 +421,14 @@ async def _provision(phone: Configurator, args: argparse.Namespace) -> int:
                 return EXIT_BAD_INPUT
             continue
         result = await phone.join(credentials)
+        if result is None:
+            print(
+                f"The device took the details and left this network to join {ssid}. "
+                "It cannot say how it went. If its own Wi-Fi network shows up again, joining "
+                "failed: connect to it and run 'wifiprov status'.",
+                file=sys.stderr,
+            )
+            return EXIT_UNKNOWN
         if result.connected:
             print(f"Connected to {ssid}. The device's address is {result.ip}.")
             return EXIT_JOINED
@@ -434,6 +501,42 @@ def _parse_address(text: str) -> tuple[str, int]:
     if not separator or not host or not port.isdigit() or not 0 <= int(port) <= 65535:
         raise ValueError(f"an address looks like HOST:PORT, not {text!r}")
     return host, int(port)
+
+
+# --------------------------------------------------------------------------- status
+
+
+def _run_status(args: argparse.Namespace) -> int:
+    try:
+        ticket = _read_ticket(args)
+        host, port = _parse_address(args.connect)
+    except (OSError, TicketError, ValueError) as error:
+        print(f"Cannot start: {error}", file=sys.stderr)
+        return EXIT_BAD_INPUT
+    return asyncio.run(_status(args, ticket, host, port))
+
+
+async def _status(args: argparse.Namespace, ticket: Ticket, host: str, port: int) -> int:
+    try:
+        transport = await connect_tcp(host, port)
+    except OSError:
+        print(f"Could not reach a device at {host}:{port}.", file=sys.stderr)
+        return EXIT_NO_DEVICE
+    try:
+        async with Configurator(ticket, transport, timeout=args.timeout) as phone:
+            last = await phone.status()
+    except ProvisioningError as error:
+        print(_describe(error), file=sys.stderr)
+        return EXIT_NO_DEVICE
+    if last.result is None:
+        print("The device has not tried to join a network yet.")
+        return EXIT_NOT_JOINED
+    if last.result.connected:
+        print(f"The device joined {last.ssid}. Its address is {last.result.ip}.")
+        return EXIT_JOINED
+    reason = describe_failure(last.result.failure) if last.result.failure else ""
+    print(f"The device could not join {last.ssid}. {reason}")
+    return EXIT_NOT_JOINED
 
 
 # ----------------------------------------------------------------------------- scan

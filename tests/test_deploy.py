@@ -25,6 +25,7 @@ def test_the_service_runs_a_command_the_program_really_has():
     args = _build_parser().parse_args(command[1:])
     assert (args.command, args.backend) == ("device", "nm")
     assert args.window > 0  # the device must not listen all the time
+    assert args.access_point  # and it talks to configurators over its own Wi-Fi network
 
 
 def test_the_service_is_locked_down_and_comes_back_after_a_crash():

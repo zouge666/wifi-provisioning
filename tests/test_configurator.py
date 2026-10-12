@@ -15,7 +15,14 @@ from wifiprov.device.fake import FakeBackend, FakeNetwork
 from wifiprov.device.lockout import Lockout
 from wifiprov.handshake import DeviceHandshake
 from wifiprov.identity import DeviceIdentity
-from wifiprov.messages import NetworkList, ProvisionRequest, ScanRequest
+from wifiprov.messages import (
+    NetworkList,
+    ProvisionAccepted,
+    ProvisionRequest,
+    ScanRequest,
+    Status,
+    StatusRequest,
+)
 from wifiprov.secret import Secret
 from wifiprov.setup_code import SetupCode
 from wifiprov.ticket import Ticket
@@ -67,8 +74,15 @@ def start(agent):
     return phone_end, device_end, asyncio.create_task(agent.serve(device_end))
 
 
+CLOSE = object()  # in a script: the link goes away here
+
+
 class StubDevice:
-    """A device that records what it is asked and answers from a script."""
+    """A device that records what it is asked and answers from a script.
+
+    An answer can be one message, raw bytes, or a list of those, which are sent one after
+    the other. CLOSE in a list ends the conversation, like a device that left its network.
+    """
 
     def __init__(self, identity, transport, answer):
         self.identity = identity
@@ -88,16 +102,22 @@ class StubDevice:
             request = messages.decode_request(session.decrypt(data))
             self.requests.append(request)
             reply = self.answer(request)
-            if isinstance(reply, bytes):  # raw bytes: a way to send something broken
-                await self.transport.send(reply)
-            else:
-                await self.transport.send(session.encrypt(messages.encode(reply)))
+            for item in reply if isinstance(reply, list) else [reply]:
+                if item is CLOSE:
+                    await self.transport.close()
+                    return
+                if isinstance(item, bytes):  # raw bytes: a way to send something broken
+                    await self.transport.send(item)
+                else:
+                    await self.transport.send(session.encrypt(messages.encode(item)))
 
 
 def stub_answers(request):
     if isinstance(request, ScanRequest):
         return NetworkList((WifiNetwork(SSID, 80, Security.WPA_PSK),))
-    return ConnectResult(True, ip="10.20.0.7")
+    if isinstance(request, StatusRequest):
+        return Status(SSID, ConnectResult(True, ip="10.20.0.7"))
+    return [ProvisionAccepted(), ConnectResult(True, ip="10.20.0.7")]
 
 
 def start_stub(identity, answer=stub_answers):
@@ -259,3 +279,86 @@ async def test_nothing_secret_goes_over_the_wire_in_the_clear(agent, ticket):
     everything = b"".join(phone_end.sent + device_end.sent)
     for secret in (PASSWORD, SSID, ticket.setup_code.normalized, ticket.setup_code.display):
         assert secret.encode() not in everything
+
+
+def accepted_then(*rest):
+    def answer(request):
+        if isinstance(request, ScanRequest):
+            return NetworkList((WifiNetwork(SSID, 80, Security.WPA_PSK),))
+        return [ProvisionAccepted(), *rest]
+
+    return answer
+
+
+async def test_a_device_that_leaves_before_it_can_say_how_it_went_gives_no_result(identity, ticket):
+    phone_end, _, task = start_stub(identity, accepted_then(CLOSE))
+    async with Configurator(ticket, phone_end, timeout=1.0) as phone:
+        assert await phone.join(join_request()) is None
+    await task
+
+
+async def test_a_device_that_goes_quiet_after_accepting_gives_no_result(identity, ticket):
+    phone_end, _, task = start_stub(identity, accepted_then())
+    async with Configurator(ticket, phone_end, timeout=1.0, join_timeout=0.05) as phone:
+        assert await phone.join(join_request()) is None
+    task.cancel()
+
+
+@pytest.mark.parametrize(
+    "replies",
+    [
+        [ConnectResult(True, ip="10.20.0.7")],  # no "accepted" first
+        [ProvisionAccepted(), NetworkList(())],  # something else instead of the result
+    ],
+    ids=["no accepted", "no result"],
+)
+async def test_a_join_answered_in_the_wrong_order_is_a_protocol_problem(identity, ticket, replies):
+    def answer(request):
+        if isinstance(request, ScanRequest):
+            return NetworkList((WifiNetwork(SSID, 80, Security.WPA_PSK),))
+        return replies
+
+    phone_end, _, task = start_stub(identity, answer)
+    async with Configurator(ticket, phone_end, timeout=1.0) as phone:
+        with pytest.raises(ProtocolProblem):
+            await phone.join(join_request())
+    await task
+
+
+async def test_status_reads_what_the_device_kept(identity, ticket):
+    phone_end, stub, task = start_stub(identity)
+    async with Configurator(ticket, phone_end, timeout=1.0) as phone:
+        assert await phone.status() == Status(SSID, ConnectResult(True, ip="10.20.0.7"))
+    await task
+    assert stub.requests == [StatusRequest()]
+
+
+async def test_status_answered_with_something_else_is_a_protocol_problem(identity, ticket):
+    phone_end, _, task = start_stub(identity, lambda request: ConnectResult(True))
+    async with Configurator(ticket, phone_end, timeout=1.0) as phone:
+        with pytest.raises(ProtocolProblem):
+            await phone.status()
+    await task
+
+
+async def test_a_new_session_reads_the_result_of_an_attempt_that_cut_the_link(
+    identity, ticket, clock
+):
+    backend = FakeBackend(NETWORKS, connected_to="Old network", drops_link=True)
+    agent = DeviceAgent(
+        identity,
+        backend,
+        lockout=Lockout(clock=clock),
+        receive_timeout=1.0,
+        connect_timeout=1.0,
+    )
+    phone_end, _, task = start(agent)
+    async with Configurator(ticket, phone_end, timeout=1.0) as phone:
+        failed = await phone.join(join_request("not the right one"))
+    assert failed == ConnectResult(False, Failure.WRONG_PASSWORD)
+    assert await task is Outcome.FAILED
+
+    phone_end, _, task = start(agent)
+    async with Configurator(ticket, phone_end, timeout=1.0) as phone:
+        assert await phone.status() == Status(SSID, ConnectResult(False, Failure.WRONG_PASSWORD))
+    await task

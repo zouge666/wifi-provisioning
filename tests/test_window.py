@@ -10,7 +10,7 @@ class FakeChannel:
     def __init__(self):
         self.closed = False
 
-    def close(self):
+    async def close(self):
         self.closed = True
 
 

@@ -12,9 +12,9 @@ logger = logging.getLogger(__name__)
 
 
 class Channel(Protocol):
-    """A way in for configurators that can be shut. An asyncio server is one."""
+    """A way in for configurators that can be shut."""
 
-    def close(self) -> None: ...
+    async def close(self) -> None: ...
 
 
 class Window:
@@ -67,7 +67,7 @@ class Window:
         try:
             await asyncio.wait({timer, connected}, return_when=asyncio.FIRST_COMPLETED)
         finally:
-            channel.close()
+            await asyncio.shield(channel.close())
             for task in (timer, connected):
                 task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):

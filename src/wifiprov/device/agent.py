@@ -20,7 +20,15 @@ from wifiprov.device.backend import NetworkBackend
 from wifiprov.device.lockout import Lockout
 from wifiprov.handshake import DeviceHandshake, HandshakeError
 from wifiprov.identity import DeviceIdentity
-from wifiprov.messages import MessageError, NetworkList, Response, ScanRequest
+from wifiprov.messages import (
+    MessageError,
+    NetworkList,
+    ProvisionAccepted,
+    Response,
+    ScanRequest,
+    Status,
+    StatusRequest,
+)
 from wifiprov.session import Session, SessionError
 from wifiprov.transport.base import Transport, TransportClosed
 from wifiprov.wifi import ConnectResult, Failure, WifiCredentials
@@ -71,6 +79,7 @@ class DeviceAgent:
         self._receive_timeout = receive_timeout
         self._connect_timeout = connect_timeout
         self.state = State.IDLE
+        self.last_attempt: tuple[str, ConnectResult] | None = None  # the network and how it went
         self._busy = False
 
     async def serve(self, transport: Transport) -> Outcome:
@@ -128,19 +137,25 @@ class DeviceAgent:
                 return Outcome.FAILED if attempted else Outcome.ABANDONED
 
             reply: Response
+            joined = False  # did this request ask to join a network?
             if isinstance(request, ScanRequest):
                 reply = NetworkList(tuple(await self._scan()))
+            elif isinstance(request, StatusRequest):
+                reply = Status(*self.last_attempt) if self.last_attempt else Status()
             else:
-                attempted = True
+                attempted = joined = True
+                # Joining may cut the link, so the configurator hears this first.
+                await self._send(transport, session, ProvisionAccepted())
                 self.state = State.APPLYING
                 reply = await self._connect(request.credentials)
+                self.last_attempt = (request.credentials.ssid, reply)
                 self.state = State.READY
 
-            # If the phone has left, whether the device joined the network still counts.
-            with contextlib.suppress(TransportClosed):
-                await transport.send(session.encrypt(messages.encode(reply)))
+            await self._send(transport, session, reply)
             if isinstance(reply, ConnectResult) and reply.connected:
                 return Outcome.CONNECTED
+            if joined and self._backend.drops_link:
+                return Outcome.FAILED  # the configurator is gone, and has to come back to ask
 
             try:
                 plaintext = session.decrypt(await self._receive(transport))
@@ -164,6 +179,11 @@ class DeviceAgent:
             # error is logged: its message might contain the password.
             logger.error("connecting failed unexpectedly: %s", type(error).__name__)
             return ConnectResult(False, Failure.OTHER)
+
+    async def _send(self, transport: Transport, session: Session, message: Response) -> None:
+        # If the phone has left, whether the device joined the network still counts.
+        with contextlib.suppress(TransportClosed):
+            await transport.send(session.encrypt(messages.encode(message)))
 
     async def _receive(self, transport: Transport) -> bytes:
         return await asyncio.wait_for(transport.receive(), self._receive_timeout)

@@ -133,12 +133,16 @@ def test_device_refuses_to_start_without_an_identity(tmp_path, capsys):
         ["--listen", "host:99999"],
         ["--fake-network", "no-equals-sign"],
         ["--backend", "nm", "--fake-open-network", "Guest"],
+        ["--access-point"],
+        ["--access-point", "--backend", "nm"],
     ],
     ids=[
         "no port",
         "port out of range",
         "fake network without a password",
         "fake network with the real adapter",
+        "access point without the real adapter",
+        "access point without a window",
     ],
 )
 def test_device_refuses_to_start_with_bad_options(tmp_path, capsys, extra):
@@ -610,3 +614,153 @@ def test_ap_with_a_bad_name_is_bad_input(monkeypatch, capsys):
     fake_access_point(monkeypatch, start_error=ValueError("a network name has 1 to 32 bytes"))
     assert main(["ap", "--ssid", "x" * 40, "--seconds", "0.01"]) == 2
     assert "1 to 32 bytes" in capsys.readouterr().err
+
+
+# ------------------------------------------------------------------------------ status
+
+
+async def test_status_says_nothing_was_tried_yet(device, ticket_file, capsys):
+    code = await run(
+        "status", "--ticket-file", str(ticket_file), "--connect", f"127.0.0.1:{device.port}"
+    )
+    assert code == 1
+    assert "has not tried to join a network yet" in capsys.readouterr().out
+
+
+async def test_status_says_how_the_last_attempt_went(
+    device, identity, ticket_file, monkeypatch, capsys
+):
+    where = ("--ticket-file", str(ticket_file), "--connect", f"127.0.0.1:{device.port}")
+    monkeypatch.setattr(sys, "stdin", io.StringIO("not the right one\n"))
+    assert await run("configure", *where, "--ssid", "Hospital WiFi", "--password-stdin") == 1
+    capsys.readouterr()
+
+    assert await run("status", *where) == 1
+    out, _ = capsys.readouterr()
+    assert "could not join Hospital WiFi" in out
+    assert "did not accept the password" in out
+
+    monkeypatch.setattr(sys, "stdin", io.StringIO(PASSWORD + "\n"))
+    assert await run("configure", *where, "--ssid", "Hospital WiFi", "--password-stdin") == 0
+    capsys.readouterr()
+
+    assert await run("status", *where) == 0
+    out, err = capsys.readouterr()
+    assert "joined Hospital WiFi. Its address is 10.20.0.7." in out
+    assert_no_secrets(identity, out, err)
+
+
+async def test_status_of_a_different_device_is_called_out(device, tmp_path, capsys):
+    other = tmp_path / "other.txt"
+    other.write_text(Ticket.from_identity(DeviceIdentity.generate()).to_uri())
+    code = await run("status", "--ticket-file", str(other), "--connect", f"127.0.0.1:{device.port}")
+    assert code == 3
+    assert "not the device on the sticker" in capsys.readouterr().err
+
+
+async def test_status_with_nothing_listening_is_reported(ticket_file, capsys):
+    server = await serve_tcp(lambda transport: asyncio.sleep(0), "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    server.close()
+    await server.wait_closed()
+    code = await run("status", "--ticket-file", str(ticket_file), "--connect", f"127.0.0.1:{port}")
+    assert code == 3
+    assert "Could not reach a device" in capsys.readouterr().err
+
+
+def test_status_with_a_bad_ticket_is_bad_input(tmp_path, capsys):
+    bad = tmp_path / "ticket.txt"
+    bad.write_text("hello")
+    assert main(["status", "--ticket-file", str(bad)]) == 2
+    assert "Cannot start" in capsys.readouterr().err
+
+
+# ------------------------------------------------------- joining that cuts the link
+
+
+async def test_a_device_that_cannot_say_how_it_went_gets_its_own_exit_code(
+    device, ticket_file, monkeypatch, capsys
+):
+    class LinkLost:
+        def __init__(self, *arguments, **options):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exception):
+            return None
+
+        async def scan(self):
+            return [WifiNetwork("Hospital WiFi", 80, Security.WPA_PSK)]
+
+        async def join(self, credentials):
+            return None
+
+    monkeypatch.setattr("wifiprov.cli.Configurator", LinkLost)
+    monkeypatch.setattr(sys, "stdin", io.StringIO(PASSWORD + "\n"))
+
+    code = await run(
+        *configure_args(ticket_file, device, "--ssid", "Hospital WiFi", "--password-stdin")
+    )
+
+    out, err = capsys.readouterr()
+    assert code == 4
+    assert "left this network to join Hospital WiFi" in err
+    assert "wifiprov status" in err
+    assert PASSWORD not in out + err
+
+
+# ------------------------------------------------------------ the access point and the window
+
+
+class FakeAccessPointBackend:
+    """Opens when asked, writes down what happens, and listens on this machine."""
+
+    def __init__(self):
+        self.events = []
+
+    async def start(self):
+        self.events.append("start")
+        return "127.0.0.1"
+
+    async def stop(self):
+        self.events.append("stop")
+
+
+@posix_only
+async def test_the_access_point_opens_with_the_window_and_closes_with_it(
+    identity, ticket_file, monkeypatch
+):
+    monkeypatch.setattr("wifiprov.cli.NETWORK_WAIT", 0)
+    backend = FakeBackend(DEMO_NETWORKS)
+    agent = DeviceAgent(identity, backend, receive_timeout=2.0, connect_timeout=2.0)
+    access_point = FakeAccessPointBackend()
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    serving = asyncio.create_task(
+        _serve_in_windows(identity, agent, backend, "0.0.0.0", port, 60, access_point)
+    )
+    try:
+        await wait_until(listening, port)
+        assert access_point.events == ["start"]
+
+        monkeypatch.setattr(sys, "stdin", io.StringIO(PASSWORD + "\n"))
+        args = configure_args(
+            ticket_file, SimpleNamespace(port=port), "--ssid", "Hospital WiFi", "--password-stdin"
+        )
+        assert await run(*args) == 0
+        await wait_until(not_listening, port)
+        assert access_point.events == ["start", "stop"]
+    finally:
+        serving.cancel()
+    await asyncio.gather(serving, return_exceptions=True)
+
+
+async def test_the_access_point_does_not_count_as_a_network_to_be_on():
+    class OnTheAccessPoint:
+        async def status(self):
+            return WifiStatus("wlp2s0", 100, "wifiprov-ap", "10.42.0.1")
+
+    assert not await _has_network(OnTheAccessPoint())

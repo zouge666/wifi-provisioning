@@ -188,6 +188,8 @@ class NetworkManagerBackend:
     polkit, and a normal user over SSH is refused.
     """
 
+    drops_link = False  # joining a network does not cut off the configurator
+
     def __init__(
         self,
         interface: str | None = None,
@@ -200,6 +202,7 @@ class NetworkManagerBackend:
         self._sleep = sleep
         self._busy = asyncio.Lock()  # one attempt at a time, even while an old one cleans up
         self._before_access_point: WifiStatus | None = None  # what to go back to afterwards
+        self._access_point_up = False
 
     async def scan(self) -> list[WifiNetwork]:
         interface = await self._find_interface()
@@ -244,13 +247,17 @@ class NetworkManagerBackend:
                 self._before_access_point = None
                 await asyncio.shield(self._go_back(interface, AP_PROFILE, before))
                 raise
+            self._access_point_up = True
             return AP_ADDRESS
 
     async def stop_access_point(self) -> None:
         """Stop being an access point and go back to the network the adapter had before."""
         async with self._busy:
+            if not self._access_point_up:
+                return
             interface = await self._find_interface()
             before, self._before_access_point = self._before_access_point, None
+            self._access_point_up = False
             await self._go_back(interface, AP_PROFILE, before)
 
     async def connect(self, credentials: WifiCredentials) -> ConnectResult:

@@ -32,7 +32,9 @@ class FakeBackend:
         connected_to: str | None = None,
         connect_delay: float = 0.0,
         hold: asyncio.Event | None = None,
+        drops_link: bool = False,
     ) -> None:
+        self.drops_link = drops_link
         self.networks = dict(networks or {})
         self.connected_to = connected_to
         self.attempts: list[str] = []

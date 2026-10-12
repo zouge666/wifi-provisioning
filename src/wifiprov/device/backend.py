@@ -12,7 +12,13 @@ class NetworkBackend(Protocol):
 
     A fake implementation lets everything be tested without a Wi-Fi adapter;
     the real one drives NetworkManager.
+
+    ``drops_link`` is True when joining a network cuts off the configurator, for example
+    because the device talks to it over its own Wi-Fi network. The conversation is over
+    after such an attempt, because the configurator has to come back and ask.
     """
+
+    drops_link: bool
 
     async def scan(self) -> list[WifiNetwork]:
         """The networks in range, strongest first. Hidden networks are left out."""
