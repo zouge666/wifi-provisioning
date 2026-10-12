@@ -153,6 +153,18 @@ def _build_parser() -> argparse.ArgumentParser:
         "--interface", metavar="NAME", help="the Wi-Fi adapter; by default the first one"
     )
     join.set_defaults(run=_run_join)
+
+    ap = commands.add_parser(
+        "ap", help="make this machine a Wi-Fi access point for a while (needs root)"
+    )
+    ap.add_argument("--ssid", required=True, help="the name of the new Wi-Fi network")
+    ap.add_argument(
+        "--seconds", type=float, default=300, metavar="SECONDS", help="how long it stays up"
+    )
+    ap.add_argument(
+        "--interface", metavar="NAME", help="the Wi-Fi adapter; by default the first one"
+    )
+    ap.set_defaults(run=_run_ap)
     return parser
 
 
@@ -472,3 +484,30 @@ async def _join_network(backend: NetworkManagerBackend, credentials: WifiCredent
         return EXIT_JOINED
     print(f"Could not join {credentials.ssid}. {describe_failure(result.failure)}", file=sys.stderr)
     return EXIT_NOT_JOINED
+
+
+# ------------------------------------------------------------------------------- ap
+
+
+def _run_ap(args: argparse.Namespace) -> int:
+    backend = NetworkManagerBackend(args.interface)
+    return asyncio.run(_access_point(backend, args.ssid, args.seconds))
+
+
+async def _access_point(backend: NetworkManagerBackend, ssid: str, seconds: float) -> int:
+    try:
+        address = await backend.start_access_point(ssid)
+    except ValueError as error:
+        print(error, file=sys.stderr)
+        return EXIT_BAD_INPUT
+    except NetworkManagerError as error:
+        print(f"Cannot start the access point: {error}", file=sys.stderr)
+        return EXIT_NOT_JOINED
+    print(f"Access point {ssid} is up. This machine is at {address}.", flush=True)
+    print(f"It stops in {seconds:g} seconds. Press Ctrl-C to stop it sooner.", flush=True)
+    try:
+        await asyncio.sleep(seconds)
+    finally:
+        await asyncio.shield(backend.stop_access_point())
+    print("The access point is stopped.", flush=True)
+    return EXIT_JOINED

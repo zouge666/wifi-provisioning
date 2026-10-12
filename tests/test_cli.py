@@ -562,3 +562,51 @@ async def test_the_device_listens_only_while_the_window_is_open(
         serving.cancel()
     await asyncio.gather(serving, return_exceptions=True)
     assert not await listening(port)
+
+
+# --------------------------------------------------------------------------------- ap
+
+
+class FakeAccessPoint:
+    """Remembers what the command asked of the adapter."""
+
+    def __init__(self, start_error=None):
+        self.events = []
+        self.start_error = start_error
+
+    async def start_access_point(self, ssid):
+        if self.start_error:
+            raise self.start_error
+        self.events.append(("start", ssid))
+        return "10.42.0.1"
+
+    async def stop_access_point(self):
+        self.events.append(("stop",))
+
+
+def fake_access_point(monkeypatch, **options):
+    adapter = FakeAccessPoint(**options)
+    monkeypatch.setattr("wifiprov.cli.NetworkManagerBackend", lambda interface=None: adapter)
+    return adapter
+
+
+def test_ap_starts_waits_and_stops(monkeypatch, capsys):
+    adapter = fake_access_point(monkeypatch)
+    assert main(["ap", "--ssid", "wifiprov-TEST", "--seconds", "0.01"]) == 0
+    out, _ = capsys.readouterr()
+    assert "Access point wifiprov-TEST is up. This machine is at 10.42.0.1." in out
+    assert "The access point is stopped." in out
+    assert adapter.events == [("start", "wifiprov-TEST"), ("stop",)]
+
+
+def test_ap_that_cannot_start_says_why_and_stops_nothing(monkeypatch, capsys):
+    adapter = fake_access_point(monkeypatch, start_error=NetworkManagerError("no dnsmasq"))
+    assert main(["ap", "--ssid", "wifiprov-TEST", "--seconds", "0.01"]) == 1
+    assert "Cannot start the access point: no dnsmasq" in capsys.readouterr().err
+    assert adapter.events == []
+
+
+def test_ap_with_a_bad_name_is_bad_input(monkeypatch, capsys):
+    fake_access_point(monkeypatch, start_error=ValueError("a network name has 1 to 32 bytes"))
+    assert main(["ap", "--ssid", "x" * 40, "--seconds", "0.01"]) == 2
+    assert "1 to 32 bytes" in capsys.readouterr().err

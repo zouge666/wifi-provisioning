@@ -6,6 +6,7 @@ import pytest
 
 from wifiprov.device.networkmanager import (
     ADDRESS_POLL,
+    AP_PROFILE,
     DHCP_WAIT,
     PROFILE_PREFIX,
     NetworkManagerBackend,
@@ -280,6 +281,7 @@ class FakeNmcli:
                 "secured": "wifi-sec.key-mgmt" in args,
                 "psk": None,
                 "autoconnect": args[args.index("connection.autoconnect") + 1],
+                "args": list(args),
             }
             return f"Connection '{name}' successfully added.\n"
         if args[:2] == ["connection", "edit"]:
@@ -312,6 +314,8 @@ class FakeNmcli:
                 return "GENERAL.STATE:30 (disconnected)\nGENERAL.CONNECTION:\nGENERAL.CON-UUID:\n"
             name, uuid = self.active
             address = "IP4.ADDRESS[1]:10.20.0.7/24\n"
+            if name == AP_PROFILE:
+                address = "IP4.ADDRESS[1]:10.42.0.1/24\n"
             if name.startswith(PROFILE_PREFIX) and self.late > 0:
                 # The real one says "connected" a moment before it shows the address.
                 self.late -= 1
@@ -618,3 +622,76 @@ async def test_nmcli_that_does_not_answer_is_stopped(tmp_path, monkeypatch):
     fake_nmcli(tmp_path, monkeypatch, "exec sleep 5")
     with pytest.raises(NetworkManagerError, match="in time"):
         await run_nmcli([], timeout=0.2)
+
+
+# ------------------------------------------------------------ the backend, access point
+
+
+async def start_access_point(fake, ssid="wifiprov-TEST"):
+    backend = NetworkManagerBackend(run=fake, sleep=Waits())
+    return backend, await backend.start_access_point(ssid)
+
+
+def setting(fake, name):
+    args = fake.profiles[AP_PROFILE]["args"]
+    return args[args.index(name) + 1]
+
+
+async def test_the_access_point_is_an_open_network_on_2_4_ghz_with_its_own_address():
+    fake = FakeNmcli()
+    _, address = await start_access_point(fake)
+    assert address == "10.42.0.1"
+    assert fake.active[0] == AP_PROFILE
+    assert setting(fake, "ssid") == "wifiprov-TEST"
+    assert setting(fake, "802-11-wireless.mode") == "ap"
+    assert setting(fake, "802-11-wireless.band") == "bg"
+    assert setting(fake, "ipv4.method") == "shared"  # NetworkManager hands out addresses
+    assert setting(fake, "connection.autoconnect") == "no"
+    assert not any(word.startswith("wifi-sec") for word in fake.profiles[AP_PROFILE]["args"])
+
+
+async def test_stopping_the_access_point_brings_the_old_network_back():
+    fake = FakeNmcli()
+    backend, _ = await start_access_point(fake)
+    await backend.stop_access_point()
+    assert fake.active == OLD
+    assert fake.profiles == {}
+
+
+async def test_an_access_point_that_cannot_start_leaves_things_as_they_were():
+    fake = FakeNmcli(failure="Error: Connection activation failed: dnsmasq did not start")
+    backend = NetworkManagerBackend(run=fake, sleep=Waits())
+    with pytest.raises(NetworkManagerError, match="dnsmasq"):
+        await backend.start_access_point("wifiprov-TEST")
+    assert fake.active == OLD
+    assert fake.profiles == {}
+
+
+async def test_an_access_point_that_is_cancelled_while_starting_goes_back():
+    fake = FakeNmcli(delay=5)
+    backend = NetworkManagerBackend(run=fake, sleep=Waits())
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(backend.start_access_point("wifiprov-TEST"), 0.2)
+    assert fake.active == OLD
+    assert fake.profiles == {}
+
+
+async def test_an_access_point_left_by_a_crash_is_replaced_not_doubled():
+    fake = FakeNmcli()
+    fake.profiles = {AP_PROFILE: {"secured": False, "psk": None, "autoconnect": "no", "args": []}}
+    await start_access_point(fake)
+    assert list(fake.profiles) == [AP_PROFILE]
+    assert setting(fake, "ssid") == "wifiprov-TEST"  # it is the new one
+
+
+async def test_an_access_point_needs_a_valid_name():
+    fake = FakeNmcli()
+    with pytest.raises(ValueError):
+        await NetworkManagerBackend(run=fake).start_access_point("x" * 33)
+    assert not fake.changed_something()
+
+
+async def test_stopping_an_access_point_that_was_never_started_is_harmless():
+    fake = FakeNmcli()
+    await NetworkManagerBackend(run=fake).stop_access_point()
+    assert fake.active == OLD

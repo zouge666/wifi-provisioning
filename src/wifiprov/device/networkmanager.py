@@ -21,6 +21,10 @@ ADDRESS_POLL = 0.5  # seconds between two looks for the address
 STATE_CONNECTED = 100  # NetworkManager's number for "the adapter has a working connection"
 STATUS_FIELDS = "GENERAL.STATE,GENERAL.CONNECTION,GENERAL.CON-UUID,IP4.ADDRESS"
 PROFILE_PREFIX = "wifiprov-"  # every connection we create starts with this
+AP_PROFILE = PROFILE_PREFIX + "ap"  # the connection that makes the adapter an access point
+AP_ADDRESS = "10.42.0.1"  # the address of this machine on its own Wi-Fi network
+AP_CHANNEL = "6"  # channel 6 on 2.4 GHz is allowed in every country
+AP_WAIT = 30  # seconds nmcli may wait for the access point to start
 
 # Part of what nmcli says when joining fails, and what it means for the technician.
 FAILURE_WORDS = (
@@ -195,6 +199,7 @@ class NetworkManagerBackend:
         self._run = run
         self._sleep = sleep
         self._busy = asyncio.Lock()  # one attempt at a time, even while an old one cleans up
+        self._before_access_point: WifiStatus | None = None  # what to go back to afterwards
 
     async def scan(self) -> list[WifiNetwork]:
         interface = await self._find_interface()
@@ -211,6 +216,42 @@ class NetworkManagerBackend:
         interface = await self._find_interface()
         text = await self._run(["-t", "-f", STATUS_FIELDS, "device", "show", interface])
         return parse_status(interface, text)
+
+    async def start_access_point(self, ssid: str) -> str:
+        """Make the adapter a Wi-Fi network that phones can join. Returns our address on it.
+
+        The adapter cannot be an access point and a client at the same time, so the network
+        it was on is dropped. stop_access_point() brings it back.
+        """
+        WifiCredentials(ssid)  # checks the name
+        async with self._busy:
+            interface = await self._find_interface()
+            if AP_PROFILE in await self._profile_names():
+                await self._try(["connection", "delete", "id", AP_PROFILE])  # left by a crash
+            before = await self.status()
+            self._before_access_point = before
+            # Open on purpose: everything the phone sends is encrypted by the protocol itself.
+            add = ["connection", "add", "type", "wifi", "ifname", interface, "con-name", AP_PROFILE]
+            add += ["ssid", ssid, "802-11-wireless.mode", "ap", "802-11-wireless.band", "bg"]
+            add += ["802-11-wireless.channel", AP_CHANNEL, "connection.autoconnect", "no"]
+            add += ["ipv4.method", "shared", "ipv4.addresses", AP_ADDRESS + "/24"]
+            add += ["ipv6.method", "disabled"]
+            up = ["--wait", str(AP_WAIT), "connection", "up", "id", AP_PROFILE, "ifname", interface]
+            try:
+                await self._run(add)
+                await self._run(up, timeout=AP_WAIT + 15)
+            except (NetworkManagerError, asyncio.CancelledError):
+                self._before_access_point = None
+                await asyncio.shield(self._go_back(interface, AP_PROFILE, before))
+                raise
+            return AP_ADDRESS
+
+    async def stop_access_point(self) -> None:
+        """Stop being an access point and go back to the network the adapter had before."""
+        async with self._busy:
+            interface = await self._find_interface()
+            before, self._before_access_point = self._before_access_point, None
+            await self._go_back(interface, AP_PROFILE, before)
 
     async def connect(self, credentials: WifiCredentials) -> ConnectResult:
         """Join a network. If that does not work, the adapter goes back to what it had."""
@@ -304,9 +345,9 @@ class NetworkManagerBackend:
         if "successfully" not in output:
             raise NetworkManagerError("nmcli could not save the password")
 
-    async def _go_back(self, interface: str, name: str, before: WifiStatus) -> None:
+    async def _go_back(self, interface: str, name: str, before: WifiStatus | None) -> None:
         await self._try(["connection", "delete", "id", name])
-        if not before.uuid:
+        if before is None or not before.uuid:
             return  # it had no connection, so there is nothing to go back to
         try:
             now = await self.status()
@@ -316,13 +357,16 @@ class NetworkManagerBackend:
             up = ["--wait", str(JOIN_WAIT), "connection", "up", "uuid", before.uuid]
             await self._try(up + ["ifname", interface], timeout=JOIN_WAIT + 15)
 
+    async def _profile_names(self) -> list[str]:
+        text = await self._run(["-t", "-f", "NAME", "connection", "show"])
+        return [split_terse(line)[0] for line in text.splitlines()]
+
     async def _forget_other_profiles(self, keep: str) -> None:
         try:
-            text = await self._run(["-t", "-f", "NAME", "connection", "show"])
+            names = await self._profile_names()
         except NetworkManagerError:
             return
-        for line in text.splitlines():
-            name = split_terse(line)[0]
+        for name in names:
             if name.startswith(PROFILE_PREFIX) and name != keep:
                 await self._try(["connection", "delete", "id", name])
 
