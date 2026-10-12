@@ -26,6 +26,7 @@ def test_the_service_runs_a_command_the_program_really_has():
     assert (args.command, args.backend) == ("device", "nm")
     assert args.window > 0  # the device must not listen all the time
     assert args.access_point  # and it talks to configurators over its own Wi-Fi network
+    assert args.web_port == 8080  # where a phone finds the page
 
 
 def test_the_service_is_locked_down_and_comes_back_after_a_crash():

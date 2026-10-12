@@ -70,7 +70,7 @@ class DeviceAgent:
         backend: NetworkBackend,
         *,
         lockout: Lockout | None = None,
-        receive_timeout: float = 30.0,
+        receive_timeout: float = 120.0,  # a person types the password between two messages
         connect_timeout: float = 60.0,
     ) -> None:
         self._identity = identity

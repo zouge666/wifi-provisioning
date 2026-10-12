@@ -14,10 +14,13 @@ const HEADER = Uint8Array.of(MessageType.DATA);
 
 export class SessionError extends Error {}
 
-// ChaCha20-Poly1305 takes a 12-byte nonce: four zero bytes and the 8-byte counter.
+// ChaCha20-Poly1305 takes a 12-byte nonce: four zero bytes and the 8-byte counter. The counter
+// stays far below 2^53, so two 32-bit halves are enough.
 function nonce(counter: number): Uint8Array {
   const bytes = new Uint8Array(12);
-  new DataView(bytes.buffer).setBigUint64(4, BigInt(counter));
+  const view = new DataView(bytes.buffer);
+  view.setUint32(4, Math.floor(counter / 2 ** 32));
+  view.setUint32(8, counter >>> 0);
   return bytes;
 }
 

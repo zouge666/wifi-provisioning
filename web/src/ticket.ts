@@ -25,6 +25,11 @@ export function deviceIdFromPublicKey(publicKey: Uint8Array): string {
   return crockford.encode(sha256(publicKey).slice(0, 5));
 }
 
+// The name of the Wi-Fi network a device makes, from the id on its sticker.
+export function accessPointName(deviceId: string): string {
+  return `wifiprov-${deviceId}`;
+}
+
 // Reads a setup code the way a technician may type it. Returns it without separators.
 export function parseSetupCode(text: string): string {
   let symbols: string;

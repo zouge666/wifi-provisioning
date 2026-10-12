@@ -135,6 +135,8 @@ def test_device_refuses_to_start_without_an_identity(tmp_path, capsys):
         ["--backend", "nm", "--fake-open-network", "Guest"],
         ["--access-point"],
         ["--access-point", "--backend", "nm"],
+        ["--web-port", "70000"],
+        ["--web-port", "-1"],
     ],
     ids=[
         "no port",
@@ -143,6 +145,8 @@ def test_device_refuses_to_start_without_an_identity(tmp_path, capsys):
         "fake network with the real adapter",
         "access point without the real adapter",
         "access point without a window",
+        "web port too large",
+        "web port below zero",
     ],
 )
 def test_device_refuses_to_start_with_bad_options(tmp_path, capsys, extra):
@@ -768,3 +772,27 @@ async def test_the_access_point_does_not_count_as_a_network_to_be_on():
             return WifiStatus("wlp2s0", 100, "wifiprov-ap", "10.42.0.1")
 
     assert not await _has_network(OnTheAccessPoint())
+
+
+@posix_only
+async def test_the_web_port_opens_and_closes_with_the_window(identity, monkeypatch):
+    monkeypatch.setattr("wifiprov.cli.NETWORK_WAIT", 0)
+    backend = FakeBackend(DEMO_NETWORKS)
+    agent = DeviceAgent(identity, backend, receive_timeout=2.0, connect_timeout=2.0)
+    ports = []
+    for _ in range(2):
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            ports.append(probe.getsockname()[1])
+    port, web_port = ports
+    serving = asyncio.create_task(
+        _serve_in_windows(identity, agent, backend, "127.0.0.1", port, 60, web_port=web_port)
+    )
+    try:
+        await wait_until(listening, port)
+        await wait_until(listening, web_port)  # the page and the WebSocket
+    finally:
+        serving.cancel()
+    await asyncio.gather(serving, return_exceptions=True)
+    await wait_until(not_listening, port)
+    await wait_until(not_listening, web_port)

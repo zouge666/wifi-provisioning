@@ -16,6 +16,7 @@ import {
 import { decodeResponse, encodeRequest, MessageError } from "../src/messages.ts";
 import { SessionError } from "../src/session.ts";
 import {
+  accessPointName,
   deviceIdFromPublicKey,
   displaySetupCode,
   parseSetupCode,
@@ -86,6 +87,7 @@ test("ticket: the same device, key and code come out of every valid spelling", (
     assert.equal(parsed.setupCode, parseSetupCode(vectors.ticket.setup_code));
   }
   assert.equal(deviceIdFromPublicKey(fromHex(vectors.ticket.public_key_hex)), vectors.ticket.device_id);
+  assert.equal(accessPointName(vectors.ticket.device_id), vectors.ticket.access_point_name);
 });
 
 test("ticket: text that is not a good ticket is refused", () => {

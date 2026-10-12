@@ -23,6 +23,7 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 from wifiprov import b64url, crockford, messages
+from wifiprov.device.accesspoint import access_point_name
 from wifiprov.handshake import (
     ConfiguratorHandshake,
     DeviceHandshake,
@@ -170,6 +171,7 @@ def _ticket(ticket: Ticket) -> dict:
     return {
         "device_id": device_id,
         "device_id_of_key": device_id_from_public_key(ticket.public_key),
+        "access_point_name": access_point_name(ticket.device_id),
         "public_key_hex": ticket.public_key.hex(),
         "setup_code": SETUP_CODE,
         "valid": valid,

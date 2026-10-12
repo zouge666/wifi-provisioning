@@ -50,6 +50,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - uses: astral-sh/setup-uv@v10.2.0
+
       # Node 22 runs TypeScript files directly, which is how the tests run.
       - uses: actions/setup-node@v7.0.0
         with:
@@ -66,4 +68,18 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+      # The device has no Node, so the built page is part of the repository.
+      - name: Check that the built page is up to date
+        run: |
+          npm run build
+          git diff --exit-code -- ../src/wifiprov/web/app.js || { echo "Run npm run build in web/ and commit the result."; exit 1; }
+
+      # The browser code talks to the real Python device over a WebSocket.
+      - name: Install the Python side
+        working-directory: .
+        run: uv sync --locked
+
+      - name: Run the end-to-end test
+        run: npm run test:e2e
 

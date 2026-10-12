@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Add this device to Wi-Fi</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main>
+  <header class="top">
+    <span>wifiprov</span>
+    <span id="device-id"></span>
+  </header>
+
+  <ol class="steps" aria-label="Progress">
+    <li id="step-sticker" class="current">1 Sticker</li>
+    <li id="step-network">2 Network</li>
+    <li id="step-result">3 Result</li>
+  </ol>
+
+  <section id="view-sticker">
+    <h1>Add this device to a Wi-Fi network</h1>
+    <p>Scan the QR code on the device with your camera. If that does not open this page, paste the text printed next to it.</p>
+    <form id="sticker-form" novalidate>
+      <label for="sticker-text">Sticker text</label>
+      <textarea id="sticker-text" rows="3" placeholder="wifiprov://v1/…" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>
+      <p class="error" id="sticker-error" role="alert" hidden></p>
+      <button type="submit" id="connect">Connect</button>
+    </form>
+    <p class="foot">This page comes from the device. Nothing leaves this Wi-Fi network, so your phone may say it has no internet.</p>
+  </section>
+
+  <section id="view-network" hidden>
+    <h1>Choose the network for this device</h1>
+    <p>The Wi-Fi password is encrypted before it leaves this page.</p>
+    <ul id="networks" class="rows"></ul>
+    <form id="join" novalidate hidden>
+      <div id="name-field" hidden>
+        <label for="join-name">Network name</label>
+        <input id="join-name" type="text" autocomplete="off" autocapitalize="off" spellcheck="false">
+      </div>
+      <div id="password-field">
+        <label for="join-password" id="password-label">Password</label>
+        <div class="field-with-link">
+          <input id="join-password" type="password" autocomplete="off" autocapitalize="off" spellcheck="false">
+          <button type="button" class="link" id="show-password">Show</button>
+        </div>
+      </div>
+      <p class="error" id="join-error" role="alert" hidden></p>
+      <button type="submit" id="join-button">Join</button>
+    </form>
+    <p class="aside"><button type="button" class="link" id="other-network">Not listed? Type its name</button></p>
+  </section>
+
+  <section id="view-sent" hidden>
+    <h1 id="sent-title"></h1>
+    <p>To do that it leaves its own network, so this page loses contact. That is expected.</p>
+    <ol class="notes">
+      <li><span>Switch your phone back to the hospital Wi-Fi.</span></li>
+      <li><span>If <code id="own-network"></code> appears in your Wi-Fi list again within a minute, joining failed. Connect to it and check the result.</span></li>
+    </ol>
+    <p class="error" id="sent-error" role="alert" hidden></p>
+    <button type="button" class="secondary" id="check">Check result</button>
+  </section>
+
+  <section id="view-result" hidden>
+    <p class="tag" id="result-tag"></p>
+    <h1 id="result-title"></h1>
+    <p id="result-text"></p>
+    <button type="button" id="result-action"></button>
+  </section>
+
+  <noscript><p class="error">This page needs JavaScript.</p></noscript>
+</main>
+<script src="/app.js"></script>
+</body>
+</html>

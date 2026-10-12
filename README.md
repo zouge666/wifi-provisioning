@@ -19,6 +19,7 @@ described in [docs/PROTOCOL.md](docs/PROTOCOL.md), and both implementations are 
 
 ```bash
 cd web && npm ci && npm test
+cd web && npm run test:e2e   # the browser code against the real device, needs uv
 ```
 
 ## Local demo
@@ -34,4 +35,22 @@ In the second terminal:
 
 ```bash
 uv run wifiprov configure --ticket-file state/ticket.txt
+```
+
+## Phone page
+
+The device can also serve a web page for the configurator. Start the demo with a web port:
+
+```bash
+uv run wifiprov device --identity state/identity.json --web-port 8080
+```
+
+Open `http://127.0.0.1:8080/` in a browser and paste the text from `state/ticket.txt`. A link
+with that text after a `#` skips the pasting.
+
+The page is built from `web/src/main.ts` into `src/wifiprov/web/app.js`. The built file is
+committed, because the device has no Node. After a change in `web/src`:
+
+```bash
+cd web && npm run build
 ```

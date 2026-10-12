@@ -40,6 +40,10 @@ wifiprov://v1/K7Q3ZXD2?pk=<public key, base64url>&code=7K3Q-9ZXD
 
 The device keeps the private key and the setup code. The setup code is a secret.
 
+The QR code can hold a link to the page of the device, with the URI after a `#`:
+`http://10.42.0.1:8080/#wifiprov://v1/...`. What follows `#` is not sent to a server. The
+page reads the URI from it and takes it out of the address bar.
+
 ## 3. The transport
 
 The protocol needs a way to send whole messages, in order and without loss, in both
@@ -48,6 +52,11 @@ what the layers below add.
 
 Over TCP, which is what the device and the command-line configurator use, a message is sent
 as a 4-byte big-endian length followed by the message. A length above 65536 is refused.
+
+Over a WebSocket, which is what a browser uses, one message is one binary WebSocket
+message, with no length of its own. The device accepts the WebSocket at `/ws` on the same
+port that serves its page. A message above 65536 bytes, or a text message, closes the
+connection.
 
 ## 4. The first byte
 
@@ -178,6 +187,10 @@ handshake, and ask with `status`. Otherwise the result follows on the same link.
   been audited by anyone else.
 - Anyone in range can occupy the device with a connection, or fill the lockout with wrong
   codes. The device closes its door when it is not provisioning.
+- The page of the device comes over plain http, and the protocol cannot protect a person
+  who is shown another page. A look-alike network can serve a page that sends the setup code
+  and the Wi-Fi password somewhere else. The command-line configurator does not have this
+  problem, because it does not load code from the device.
 - The browser reads a response with `JSON.parse`. It does not refuse repeated keys, does not
   tell `5.0` from `5`, and only roughly checks that an IPv6 address is written in its usual
   form. The messages are authenticated and come from the device, and the page only shows them.

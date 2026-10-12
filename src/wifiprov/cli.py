@@ -23,6 +23,7 @@ import signal
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Protocol
 
 from wifiprov.configurator.client import (
     Configurator,
@@ -41,6 +42,7 @@ from wifiprov.secret import Secret
 from wifiprov.ticket import Ticket, TicketError
 from wifiprov.transport.base import Transport
 from wifiprov.transport.tcp import connect_tcp, serve_tcp
+from wifiprov.transport.web import serve_web
 from wifiprov.wifi import Failure, Security, WifiCredentials, WifiNetwork, describe_failure
 from wifiprov.wire import RejectReason
 
@@ -108,6 +110,13 @@ def _build_parser() -> argparse.ArgumentParser:
         default=0,
         metavar="SECONDS",
         help="listen only this long, and only while the device has no network; 0 means always",
+    )
+    device.add_argument(
+        "--web-port",
+        type=int,
+        default=0,
+        metavar="PORT",
+        help="also serve the web page and a WebSocket on this port; 0 means not at all",
     )
     device.add_argument(
         "--access-point",
@@ -235,13 +244,19 @@ def _run_device(args: argparse.Namespace) -> int:
         backend = _device_backend(args)
         if args.access_point and (args.backend != "nm" or args.window <= 0):
             raise ValueError("--access-point needs --backend nm and a --window")
+        if not 0 <= args.web_port <= 65535:
+            raise ValueError("--web-port is a port number, 1 to 65535")
     except (OSError, IdentityError, ValueError) as error:
         print(f"Cannot start the device: {error}", file=sys.stderr)
         return EXIT_BAD_INPUT
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
+    # The web library calls every page file it serves a "rejected connection". Only noise.
+    logging.getLogger("websockets.server").setLevel(logging.WARNING)
     with contextlib.suppress(AttributeError):  # show output at once, even when redirected
         sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]
-    asyncio.run(_serve_device(identity, backend, host, port, args.window, args.access_point))
+    asyncio.run(
+        _serve_device(identity, backend, host, port, args.window, args.access_point, args.web_port)
+    )
     return EXIT_JOINED
 
 
@@ -252,19 +267,27 @@ async def _serve_device(
     port: int,
     window_seconds: float,
     access_point: bool = False,
+    web_port: int = 0,
 ) -> None:
     if access_point and isinstance(backend, NetworkManagerBackend):
         wifi = AccessPointBackend(backend, access_point_name(identity.device_id))
         agent = DeviceAgent(identity, wifi, connect_timeout=AP_CONNECT_TIMEOUT)
-        await _serve_in_windows(identity, agent, backend, host, port, window_seconds, wifi)
+        await _serve_in_windows(
+            identity, agent, backend, host, port, window_seconds, wifi, web_port
+        )
         return
     agent = DeviceAgent(identity, backend)
     if window_seconds > 0:
-        await _serve_in_windows(identity, agent, backend, host, port, window_seconds)
+        await _serve_in_windows(
+            identity, agent, backend, host, port, window_seconds, web_port=web_port
+        )
         return
     server = await serve_tcp(agent.serve, host, port)
     address = server.sockets[0].getsockname()
     print(f"Device {identity.device_id} is listening on {address[0]}:{address[1]}")
+    if web_port:
+        web = await serve_web(agent.serve, host, web_port)
+        print(f"The page is at http://{host}:{web.port}/")
     if isinstance(backend, FakeBackend):
         print(
             "It uses a fake Wi-Fi adapter: nothing on this machine will change. Pretend networks:"
@@ -286,6 +309,7 @@ async def _serve_in_windows(
     port: int,
     seconds: float,
     access_point: AccessPointBackend | None = None,
+    web_port: int = 0,
 ) -> None:
     async def handle(transport: Transport) -> None:
         if await agent.serve(transport) is Outcome.CONNECTED:
@@ -295,14 +319,19 @@ async def _serve_in_windows(
         return await _has_network(backend)
 
     async def open_channel() -> _Listener:
-        if access_point is None:
-            return _Listener(await serve_tcp(handle, host, port))
-        address = await access_point.start()
+        address = host if access_point is None else await access_point.start()
+        servers: list[_Closable] = []
         try:
-            return _Listener(await serve_tcp(handle, address, port), access_point)
+            servers.append(await serve_tcp(handle, address, port))
+            if web_port:
+                servers.append(await serve_web(handle, address, web_port))
         except OSError:
-            await access_point.stop()
+            for server in servers:
+                server.close()
+            if access_point is not None:
+                await access_point.stop()
             raise
+        return _Listener(servers, access_point)
 
     window = Window(open_channel, has_network, seconds=seconds, grace=NETWORK_WAIT)
     reopen = asyncio.Event()
@@ -334,17 +363,22 @@ async def _has_network(backend: FakeBackend | NetworkManagerBackend) -> bool:
     return status.connected and status.ip is not None and status.connection != AP_PROFILE
 
 
+class _Closable(Protocol):
+    def close(self) -> None: ...
+
+
 class _Listener:
-    """The way in while the window is open: a server, and the access point under it if any."""
+    """The way in while the window is open: servers, and the access point under them if any."""
 
     def __init__(
-        self, server: asyncio.Server, access_point: AccessPointBackend | None = None
+        self, servers: list[_Closable], access_point: AccessPointBackend | None = None
     ) -> None:
-        self._server = server
+        self._servers = servers
         self._access_point = access_point
 
     async def close(self) -> None:
-        self._server.close()
+        for server in self._servers:
+            server.close()
         if self._access_point is not None:
             await self._access_point.stop()
 

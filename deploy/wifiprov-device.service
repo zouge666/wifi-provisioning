@@ -4,7 +4,7 @@ Wants=NetworkManager.service
 After=NetworkManager.service
 
 [Service]
-ExecStart=/opt/wifiprov/bin/wifiprov device --backend nm --access-point --identity /var/lib/wifiprov/identity.json --window 600
+ExecStart=/opt/wifiprov/bin/wifiprov device --backend nm --access-point --web-port 8080 --identity /var/lib/wifiprov/identity.json --window 600
 Restart=on-failure
 RestartSec=5
 # The identity of the device is kept here. Only root can read it.

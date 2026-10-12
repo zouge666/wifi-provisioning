@@ -123,6 +123,7 @@
   "ticket": {
     "device_id": "A382631S",
     "device_id_of_key": "A382631S",
+    "access_point_name": "wifiprov-A382631S",
     "public_key_hex": "ca4ea777f26ea0979bc1fa6e250767f162a5afb87683a2549770853272de8941",
     "setup_code": "7K3Q-9ZXD",
     "valid": [
