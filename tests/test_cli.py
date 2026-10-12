@@ -15,10 +15,11 @@ from wifiprov.device.fake import FakeBackend
 from wifiprov.device.lockout import Lockout
 from wifiprov.device.networkmanager import NetworkManagerError, WifiStatus
 from wifiprov.identity import DeviceIdentity
+from wifiprov.secret import Secret
 from wifiprov.setup_code import SetupCode
 from wifiprov.ticket import Ticket
 from wifiprov.transport.tcp import serve_tcp
-from wifiprov.wifi import Security, WifiNetwork
+from wifiprov.wifi import ConnectResult, Failure, Security, WifiNetwork
 
 posix_only = pytest.mark.skipif(os.name != "posix", reason="relies on POSIX file modes")
 PASSWORD = "correct horse battery"
@@ -339,7 +340,7 @@ def test_the_program_can_be_run_as_a_module():
         [sys.executable, "-m", "wifiprov", "--help"], capture_output=True, text=True, timeout=60
     )
     assert result.returncode == 0
-    for command in ("init", "device", "configure", "scan"):
+    for command in ("init", "device", "configure", "scan", "join"):
         assert command in result.stdout
 
 
@@ -400,3 +401,74 @@ def test_scan_says_why_it_could_not_read_the_adapter(monkeypatch, capsys):
     monkeypatch.setattr("wifiprov.cli.NetworkManagerBackend", Broken)
     assert main(["scan"]) == 1
     assert "no Wi-Fi adapter" in capsys.readouterr().err
+
+
+# ------------------------------------------------------------------------------- join
+
+
+def fake_adapter(monkeypatch, result=None, error=None):
+    """Put a pretend adapter in place of NetworkManager. Returns the credentials it was given."""
+    seen = []
+
+    class Adapter:
+        def __init__(self, interface=None):
+            self.interface = interface
+
+        async def connect(self, credentials):
+            seen.append(credentials)
+            if error:
+                raise error
+            return result
+
+    monkeypatch.setattr("wifiprov.cli.NetworkManagerBackend", Adapter)
+    return seen
+
+
+def test_join_reports_a_success(monkeypatch, capsys):
+    seen = fake_adapter(monkeypatch, ConnectResult(True, ip="10.20.0.7"))
+    monkeypatch.setattr(sys, "stdin", io.StringIO(PASSWORD + "\n"))
+    assert main(["join", "--ssid", "Hospital", "--password-stdin"]) == 0
+    assert "Connected to Hospital. The address is 10.20.0.7." in capsys.readouterr().out
+    assert seen[0].ssid == "Hospital"
+    assert seen[0].password == Secret(PASSWORD)
+
+
+def test_join_says_why_it_could_not_join(monkeypatch, capsys):
+    fake_adapter(monkeypatch, ConnectResult(False, Failure.WRONG_PASSWORD))
+    monkeypatch.setattr(sys, "stdin", io.StringIO("not the password\n"))
+    assert main(["join", "--ssid", "Hospital", "--password-stdin"]) == 1
+    assert "did not accept the password" in capsys.readouterr().err
+
+
+def test_join_with_an_empty_password_means_an_open_network(monkeypatch):
+    seen = fake_adapter(monkeypatch, ConnectResult(True, ip="192.168.50.4"))
+    monkeypatch.setattr(sys, "stdin", io.StringIO("\n"))
+    assert main(["join", "--ssid", "Guest", "--password-stdin"]) == 0
+    assert seen[0].password is None
+
+
+def test_join_asks_for_the_password_at_a_hidden_prompt(monkeypatch):
+    seen = fake_adapter(monkeypatch, ConnectResult(True, ip="10.20.0.7"))
+    monkeypatch.setattr(getpass, "getpass", lambda prompt="": PASSWORD)
+    assert main(["join", "--ssid", "Hospital"]) == 0
+    assert seen[0].password == Secret(PASSWORD)
+
+
+def test_join_refuses_a_password_that_cannot_be_a_wifi_password(monkeypatch, capsys):
+    fake_adapter(monkeypatch, ConnectResult(True, ip="10.20.0.7"))
+    monkeypatch.setattr(sys, "stdin", io.StringIO("tiny\n"))
+    assert main(["join", "--ssid", "Hospital", "--password-stdin"]) == 2
+    assert "tiny" not in capsys.readouterr().err
+
+
+def test_join_says_so_when_the_adapter_cannot_be_used(monkeypatch, capsys):
+    fake_adapter(monkeypatch, error=NetworkManagerError("NetworkManager sees no Wi-Fi adapter"))
+    monkeypatch.setattr(sys, "stdin", io.StringIO(PASSWORD + "\n"))
+    assert main(["join", "--ssid", "Hospital", "--password-stdin"]) == 1
+    assert "no Wi-Fi adapter" in capsys.readouterr().err
+
+
+def test_the_wifi_password_cannot_be_given_on_the_command_line_of_join():
+    with pytest.raises(SystemExit) as exit_:
+        main(["join", "--ssid", "Hospital", "--password", PASSWORD])
+    assert exit_.value.code == 2

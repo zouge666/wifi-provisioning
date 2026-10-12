@@ -117,6 +117,20 @@ def _build_parser() -> argparse.ArgumentParser:
         "--interface", metavar="NAME", help="the Wi-Fi adapter; by default the first one"
     )
     scan.set_defaults(run=_run_scan)
+
+    join = commands.add_parser(
+        "join", help="join a Wi-Fi network on this machine through NetworkManager (needs root)"
+    )
+    join.add_argument("--ssid", required=True, help="the network to join")
+    join.add_argument(
+        "--password-stdin",
+        action="store_true",
+        help="read the Wi-Fi password from stdin instead of asking; an empty one means open",
+    )
+    join.add_argument(
+        "--interface", metavar="NAME", help="the Wi-Fi adapter; by default the first one"
+    )
+    join.set_defaults(run=_run_join)
     return parser
 
 
@@ -344,3 +358,29 @@ async def _scan(backend: NetworkManagerBackend) -> int:
     for number, network in enumerate(networks, start=1):
         print(f"  {number}. {network.ssid}  (signal {network.signal}, {network.security.value})")
     return EXIT_JOINED
+
+
+# ----------------------------------------------------------------------------- join
+
+
+def _run_join(args: argparse.Namespace) -> int:
+    try:
+        password = _ask_password(args)
+        credentials = WifiCredentials(args.ssid, Secret(password) if password else None)
+    except ValueError as error:
+        print(error, file=sys.stderr)
+        return EXIT_BAD_INPUT
+    return asyncio.run(_join_network(NetworkManagerBackend(args.interface), credentials))
+
+
+async def _join_network(backend: NetworkManagerBackend, credentials: WifiCredentials) -> int:
+    try:
+        result = await backend.connect(credentials)
+    except NetworkManagerError as error:
+        print(f"Cannot use the Wi-Fi adapter: {error}", file=sys.stderr)
+        return EXIT_NOT_JOINED
+    if result.connected:
+        print(f"Connected to {credentials.ssid}. The address is {result.ip}.")
+        return EXIT_JOINED
+    print(f"Could not join {credentials.ssid}. {describe_failure(result.failure)}", file=sys.stderr)
+    return EXIT_NOT_JOINED

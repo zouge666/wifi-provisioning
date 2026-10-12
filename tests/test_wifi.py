@@ -37,7 +37,17 @@ def test_valid_passwords_are_accepted(password):
 
 @pytest.mark.parametrize(
     "password",
-    ["short", "a" * 7, "a" * 65, "pässword1234", "tab\tinside1", "a" * 63 + "\n", "z" * 64 + "!"],
+    [
+        "short",
+        "a" * 7,
+        "a" * 65,
+        "pässword1234",
+        "tab\tinside1",
+        "a" * 63 + "\n",
+        "z" * 64 + "!",
+        " starts with a space",
+        "ends with a space ",
+    ],
 )
 def test_invalid_passwords_are_rejected_without_repeating_them(password):
     with pytest.raises(ValueError) as error:

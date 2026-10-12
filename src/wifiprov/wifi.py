@@ -66,6 +66,10 @@ def _check_passphrase(password: str) -> None:
         raise ValueError(f"a Wi-Fi password has {PASSPHRASE_MIN} to {PASSPHRASE_MAX} characters")
     if not all(0x20 <= ord(character) <= 0x7E for character in password):
         raise ValueError("a Wi-Fi password uses printable ASCII characters only")
+    if password != password.strip(" "):
+        # NetworkManager's editor drops spaces at both ends, so the device would join with
+        # a different password than the one that was typed.
+        raise ValueError("a Wi-Fi password cannot start or end with a space")
 
 
 @dataclass(frozen=True)
