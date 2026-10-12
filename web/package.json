@@ -1,0 +1,23 @@
+{
+  "name": "wifiprov-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The configurator side of the wifiprov protocol, for the browser.",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.ts\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@noble/ciphers": "2.4.0",
+    "@noble/curves": "2.4.0",
+    "@noble/hashes": "2.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.4",
+    "typescript": "7.0.2"
+  }
+}

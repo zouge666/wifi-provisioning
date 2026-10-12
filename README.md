@@ -13,6 +13,14 @@ uv run ruff check .
 uv run ruff format --check .
 ```
 
+The configurator for the browser is in `web/`. It needs Node 22.18 or newer. The protocol is
+described in [docs/PROTOCOL.md](docs/PROTOCOL.md), and both implementations are tested against
+`protocol/vectors.json`.
+
+```bash
+cd web && npm ci && npm test
+```
+
 ## Local demo
 
 Two terminals on one machine, no hardware: the device uses a fake Wi-Fi adapter.

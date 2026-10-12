@@ -78,9 +78,12 @@ def derive_session_keys(
 class DeviceHandshake:
     """The device's half of the handshake. One instance serves one attempt."""
 
-    def __init__(self, identity: DeviceIdentity) -> None:
+    def __init__(
+        self, identity: DeviceIdentity, *, ephemeral: X25519PrivateKey | None = None
+    ) -> None:
+        """A fixed ``ephemeral`` key is only for test vectors. Normally it is made fresh."""
         self._identity = identity
-        self._ephemeral: X25519PrivateKey | None = X25519PrivateKey.generate()
+        self._ephemeral: X25519PrivateKey | None = ephemeral or X25519PrivateKey.generate()
         self._hello: bytes | None = None
 
     def hello(self) -> bytes:
@@ -117,9 +120,10 @@ class DeviceHandshake:
 class ConfiguratorHandshake:
     """The configurator's half of the handshake. One instance serves one attempt."""
 
-    def __init__(self, ticket: Ticket) -> None:
+    def __init__(self, ticket: Ticket, *, ephemeral: X25519PrivateKey | None = None) -> None:
+        """A fixed ``ephemeral`` key is only for test vectors. Normally it is made fresh."""
         self._ticket = ticket
-        self._ephemeral: X25519PrivateKey | None = X25519PrivateKey.generate()
+        self._ephemeral: X25519PrivateKey | None = ephemeral or X25519PrivateKey.generate()
 
     def accept(self, hello: bytes) -> tuple[bytes, Session]:
         """Check the device's hello. Returns the reply to send and the session."""

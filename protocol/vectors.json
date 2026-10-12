@@ -1,0 +1,516 @@
+{
+  "about": "Test vectors for the wifiprov protocol. Made by protocol/generate_vectors.py.",
+  "b64url": {
+    "valid": [
+      {
+        "hex": "",
+        "text": ""
+      },
+      {
+        "hex": "00",
+        "text": "AA"
+      },
+      {
+        "hex": "fbff",
+        "text": "-_8"
+      },
+      {
+        "hex": "616263",
+        "text": "YWJj"
+      },
+      {
+        "hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+        "text": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+      },
+      {
+        "hex": "ffffffffff",
+        "text": "______8"
+      }
+    ],
+    "invalid": [
+      "AA==",
+      "A",
+      "AB",
+      "A B",
+      "+/8",
+      "é",
+      "AAAA\n"
+    ]
+  },
+  "crockford": {
+    "encode": [
+      {
+        "hex": "",
+        "text": ""
+      },
+      {
+        "hex": "00",
+        "text": "00"
+      },
+      {
+        "hex": "ff",
+        "text": "ZW"
+      },
+      {
+        "hex": "0102030405",
+        "text": "04106105"
+      },
+      {
+        "hex": "00010203040506070809",
+        "text": "000G40R40M30E209"
+      }
+    ],
+    "normalize": [
+      {
+        "input": "7K3Q-9ZXD",
+        "output": "7K3Q9ZXD"
+      },
+      {
+        "input": "7k3q 9zxd",
+        "output": "7K3Q9ZXD"
+      },
+      {
+        "input": "O0Il1",
+        "output": "00111"
+      },
+      {
+        "input": "ABCDEFGHJKMNPQRSTVWXYZ",
+        "output": "ABCDEFGHJKMNPQRSTVWXYZ"
+      },
+      {
+        "input": "",
+        "output": ""
+      }
+    ],
+    "invalid": [
+      "U",
+      "7K3Q9ZX!",
+      "é",
+      "7K3Q_9ZXD"
+    ]
+  },
+  "setup_code": {
+    "valid": [
+      {
+        "input": "7K3Q-9ZXD",
+        "normalized": "7K3Q9ZXD",
+        "display": "7K3Q-9ZXD"
+      },
+      {
+        "input": "7k3q9zxd",
+        "normalized": "7K3Q9ZXD",
+        "display": "7K3Q-9ZXD"
+      },
+      {
+        "input": " 7K3Q 9ZXD ",
+        "normalized": "7K3Q9ZXD",
+        "display": "7K3Q-9ZXD"
+      },
+      {
+        "input": "OOIL-1234",
+        "normalized": "00111234",
+        "display": "0011-1234"
+      }
+    ],
+    "invalid": [
+      "7K3Q-9ZX",
+      "7K3Q-9ZXDD",
+      "7K3Q-9ZXU",
+      "",
+      "7K3Q-9ZX!"
+    ]
+  },
+  "ticket": {
+    "device_id": "A382631S",
+    "device_id_of_key": "A382631S",
+    "public_key_hex": "ca4ea777f26ea0979bc1fa6e250767f162a5afb87683a2549770853272de8941",
+    "setup_code": "7K3Q-9ZXD",
+    "valid": [
+      "wifiprov://v1/A382631S?pk=yk6nd_JuoJebwfpuJQdn8WKlr7h2g6JUl3CFMnLeiUE&code=7K3Q-9ZXD",
+      "  wifiprov://v1/A382631S?pk=yk6nd_JuoJebwfpuJQdn8WKlr7h2g6JUl3CFMnLeiUE&code=7K3Q-9ZXD\n",
+      "wifiprov://v1/A382631S?pk=yk6nd_JuoJebwfpuJQdn8WKlr7h2g6JUl3CFMnLeiUE&code=7k3q9zxd"
+    ],
+    "invalid": [
+      "http://v1/A382631S?pk=yk6nd_JuoJebwfpuJQdn8WKlr7h2g6JUl3CFMnLeiUE&code=7K3Q-9ZXD",
+      "wifiprov://v2/A382631S?pk=yk6nd_JuoJebwfpuJQdn8WKlr7h2g6JUl3CFMnLeiUE&code=7K3Q-9ZXD",
+      "wifiprov://v1/A382631S?code=7K3Q-9ZXD",
+      "wifiprov://v1/A382631S?pk=yk6nd_JuoJebwfpuJQdn8WKlr7h2g6JUl3CFMnLeiUE",
+      "wifiprov://v1/A382631S?pk=yk6nd_JuoJebwfpuJQdn8WKlr7h2g6JUl3CFMnLeiUE&code=7K3Q-9ZXD&x=1",
+      "wifiprov://v1/A382631S?pk=yk6nd_JuoJebwfpuJQdn8WKlr7h2g6JUl3CFMnLeiUE&pk=yk6nd_JuoJebwfpuJQdn8WKlr7h2g6JUl3CFMnLeiUE&code=7K3Q-9ZXD",
+      "wifiprov://v1/T5VW0G6F?pk=yk6nd_JuoJebwfpuJQdn8WKlr7h2g6JUl3CFMnLeiUE&code=7K3Q-9ZXD",
+      "wifiprov://v1/A382631S?pk=yk6nd_JuoJebwfpuJQdn8WKlr7h2g6JUl3CFMnLeiUE&code=7K3Q-9ZXD#more",
+      "wifiprov://v1/A382631S?pk=yk6nd_JuoJebwfpuJQdn8WKlr7h2g6JUl3CFMnLeiUEA&code=7K3Q-9ZXD",
+      "wifiprov://v1/A382631S?pk=yk6nd_JuoJebwfpuJQdn8WKlr7h2g6JUl3CFMnLeiU&code=7K3Q-9ZXD",
+      "wifiprov://v1/A382631S?pk=yk6nd_JuoJebwfpuJQdn8WKlr7h2g6JUl3CFMnLeiUE&code=7K3Q-9ZX",
+      "hello",
+      ""
+    ]
+  },
+  "handshake": {
+    "device_private_key_hex": "ac710c9c93405d855a97a8473ea8d85e78b1543624af49dfd38dde66134d6ff6",
+    "device_public_key_hex": "ca4ea777f26ea0979bc1fa6e250767f162a5afb87683a2549770853272de8941",
+    "setup_code": "7K3Q-9ZXD",
+    "device_ephemeral_private_hex": "65f63842dfb8f830d803f2c45aab130109e97fe2446e597b3d31890d0ab11268",
+    "configurator_ephemeral_private_hex": "973dbd4a32851ded3516986f3c5f10d36e032a9f53c9a6715d7d1c953595a6b4",
+    "hello_hex": "0101f4e1039b6ec7a317942b93fece9f64fe6cde0c0a09254ac3499de708c112590a9d089d5b2acf42498482c98ecd20872380e29cc1fe375d1cda5b4412575485179c8ed2d649fcbd0013956ab99d1d7e16f100909b43b04b5f686b9c00b9d65909",
+    "keyshare_hex": "02b9b48db3df464d1f58918bf7985013ce1b90515fbfa90892eacfaab1e40dec00",
+    "shared_secret_hex": "d876fb66c46abff7f3202ddf027a35f29a1f0fe5abb232f8e4371dfa9b323b57",
+    "configurator_to_device_key_hex": "64b9474791687890f566855902dc6b3d6ce38b01f40afa148de077755ea7a974",
+    "device_to_configurator_key_hex": "2d97b9dc5dc55f6d403560e813d532e94064869a3ac7159b76a1195c0547c4e8",
+    "wrong_code_keys": {
+      "setup_code": "0000-0000",
+      "configurator_to_device_key_hex": "a3f2d8bbe57e81e751e5525d02d7430eb306b42e02b26ba2016cf43572de553b",
+      "device_to_configurator_key_hex": "f3f83ec95fccedf33acc35250cfa09721c4111fb768d29dded457b8f01450ba9"
+    },
+    "bad_hellos": [
+      {
+        "name": "signed by another device",
+        "hello_hex": "0101f4e1039b6ec7a317942b93fece9f64fe6cde0c0a09254ac3499de708c112590a6202981c9ba89f241c711195e4477eb789d9508240301d97f4375d3690de8c8a8d83b8b33471d59005a08e76add2e004a131a10ed79798bff910bf864347a30c",
+        "error": "wrong_device"
+      },
+      {
+        "name": "one bit of the signature flipped",
+        "hello_hex": "0101f4e1039b6ec7a317942b93fece9f64fe6cde0c0a09254ac3499de708c112590a9d089d5b2acf42498482c98ecd20872380e29cc1fe375d1cda5b4412575485179c8ed2d649fcbd0013956ab99d1d7e16f100909b43b04b5f686b9c00b9d65908",
+        "error": "wrong_device"
+      },
+      {
+        "name": "the key is not the one that was signed",
+        "hello_hex": "0101f5e1039b6ec7a317942b93fece9f64fe6cde0c0a09254ac3499de708c112590a9d089d5b2acf42498482c98ecd20872380e29cc1fe375d1cda5b4412575485179c8ed2d649fcbd0013956ab99d1d7e16f100909b43b04b5f686b9c00b9d65909",
+        "error": "wrong_device"
+      },
+      {
+        "name": "unsupported version",
+        "hello_hex": "0102f4e1039b6ec7a317942b93fece9f64fe6cde0c0a09254ac3499de708c112590a9d089d5b2acf42498482c98ecd20872380e29cc1fe375d1cda5b4412575485179c8ed2d649fcbd0013956ab99d1d7e16f100909b43b04b5f686b9c00b9d65909",
+        "error": "handshake_error"
+      },
+      {
+        "name": "not a hello",
+        "hello_hex": "0201f4e1039b6ec7a317942b93fece9f64fe6cde0c0a09254ac3499de708c112590a9d089d5b2acf42498482c98ecd20872380e29cc1fe375d1cda5b4412575485179c8ed2d649fcbd0013956ab99d1d7e16f100909b43b04b5f686b9c00b9d65909",
+        "error": "handshake_error"
+      },
+      {
+        "name": "too short",
+        "hello_hex": "0101f4e1039b6ec7a317942b93fece9f64fe6cde0c0a09254ac3499de708c112590a9d089d5b2acf42498482c98ecd20872380e29cc1fe375d1cda5b4412575485179c8ed2d649fcbd0013956ab99d1d7e16f100909b43b04b5f686b9c00b9d659",
+        "error": "handshake_error"
+      },
+      {
+        "name": "too long",
+        "hello_hex": "0101f4e1039b6ec7a317942b93fece9f64fe6cde0c0a09254ac3499de708c112590a9d089d5b2acf42498482c98ecd20872380e29cc1fe375d1cda5b4412575485179c8ed2d649fcbd0013956ab99d1d7e16f100909b43b04b5f686b9c00b9d6590900",
+        "error": "handshake_error"
+      },
+      {
+        "name": "empty",
+        "hello_hex": "",
+        "error": "handshake_error"
+      },
+      {
+        "name": "signed key that forces a zero secret",
+        "hello_hex": "01010000000000000000000000000000000000000000000000000000000000000000d110f50139c5fc095b7f239c86c51ad2e60bfcb2e633b7e3db665970017f0ae73c0d1657335176abb17482e4aa5d22e4473c673f572b750d2028501bf44ebe0f",
+        "error": "handshake_error"
+      }
+    ],
+    "session": {
+      "from_configurator": [
+        {
+          "counter": 0,
+          "plaintext_hex": "7b2274797065223a227363616e227d",
+          "wire_hex": "0389412f736ebecf41dcd85e23bf14ab36c21c0f81fb05c70733dcfed7cbf1ae"
+        },
+        {
+          "counter": 1,
+          "plaintext_hex": "7b2274797065223a2270726f766973696f6e222c2273736964223a22486f73706974616c222c2270617373776f7264223a22636f727265637420686f727365227d",
+          "wire_hex": "0344289678163caea7134042726ea051bd701808c8e4d0f135d4986bb6637c20944eb6260b656bf7ed7a77348d6f5be349b9969805b8df60dab70bab0f2da547f7143765ec11518e60a3f27ff3f20927d301"
+        },
+        {
+          "counter": 2,
+          "plaintext_hex": "7b2274797065223a22737461747573227d",
+          "wire_hex": "0321914c61726cd897dcb86097ebbe88cb133cf5e2816e2611706c0e7e02de58b329"
+        }
+      ],
+      "from_device": [
+        {
+          "counter": 0,
+          "plaintext_hex": "7b2274797065223a226e6574776f726b73222c226e6574776f726b73223a5b7b2273736964223a22486f73706974616c222c227369676e616c223a38302c227365637572697479223a227770612d70736b227d5d7d",
+          "wire_hex": "03ce726b9001f455f23b52ec19333fec236e4ee4370b20b594e402076709642c5c838dea596e5cbbd70c5dc9b40662024561bda9fab47a53ee2ab68d7e096c37e13f46f880d87568ce891183a6ed2ec35dc5d79716e1490c4d06a245c6c7eff52c07b2d6f01f"
+        },
+        {
+          "counter": 1,
+          "plaintext_hex": "7b2274797065223a226163636570746564222c2264726f70735f6c696e6b223a747275657d",
+          "wire_hex": "039739fcfb9021a8a0fed3376f882edc1d311aa877036fc84353c8799ab33e2cc9422f72db6d2ecf1d31ba2e2465bf3b9ea454bcefd2"
+        },
+        {
+          "counter": 2,
+          "plaintext_hex": "7b2274797065223a226c6173745f617474656d7074222c2273736964223a22486f73706974616c222c22636f6e6e6563746564223a66616c73652c226661696c757265223a2277726f6e675f70617373776f7264227d",
+          "wire_hex": "0363f96907a10354fe6f2eb595688db48f70bb107ca84e8d037a028f8fb5db08c36d97b9196d7cf4b2014fc13af143eb556e366e06f4396612f42b7094b099db5d5980bdc9c65f31720eff87ad8bdbd00074c3e635f563ee9c12c4e98db352cef8fef3afc2c81d"
+        }
+      ],
+      "bad_messages": [
+        {
+          "name": "a bit of the tag flipped",
+          "wire_hex": "03ce726b9001f455f23b52ec19333fec236e4ee4370b20b594e402076709642c5c838dea596e5cbbd70c5dc9b40662024561bda9fab47a53ee2ab68d7e096c37e13f46f880d87568ce891183a6ed2ec35dc5d79716e1490c4d06a245c6c7eff52c07b2d6f01e"
+        },
+        {
+          "name": "a bit of the text flipped",
+          "wire_hex": "03ce736b9001f455f23b52ec19333fec236e4ee4370b20b594e402076709642c5c838dea596e5cbbd70c5dc9b40662024561bda9fab47a53ee2ab68d7e096c37e13f46f880d87568ce891183a6ed2ec35dc5d79716e1490c4d06a245c6c7eff52c07b2d6f01f"
+        },
+        {
+          "name": "the header changed",
+          "wire_hex": "04ce726b9001f455f23b52ec19333fec236e4ee4370b20b594e402076709642c5c838dea596e5cbbd70c5dc9b40662024561bda9fab47a53ee2ab68d7e096c37e13f46f880d87568ce891183a6ed2ec35dc5d79716e1490c4d06a245c6c7eff52c07b2d6f01f"
+        },
+        {
+          "name": "cut short",
+          "wire_hex": "03ce726b9001f455f23b52ec19333fec236e4ee4370b20b594e402076709642c5c838dea596e5cbbd70c5dc9b40662024561bda9fab47a53ee2ab68d7e096c37e13f46f880d87568ce891183a6ed2ec35dc5d79716e1490c4d06a245c6c7eff52c07b2d6f0"
+        },
+        {
+          "name": "only the header",
+          "wire_hex": "03"
+        },
+        {
+          "name": "empty",
+          "wire_hex": ""
+        },
+        {
+          "name": "the second message first",
+          "wire_hex": "039739fcfb9021a8a0fed3376f882edc1d311aa877036fc84353c8799ab33e2cc9422f72db6d2ecf1d31ba2e2465bf3b9ea454bcefd2"
+        }
+      ],
+      "after_a_bad_message": {
+        "bad_wire_hex": "03ce726b9001f455f23b52ec19333fec236e4ee4370b20b594e402076709642c5c838dea596e5cbbd70c5dc9b40662024561bda9fab47a53ee2ab68d7e096c37e13f46f880d87568ce891183a6ed2ec35dc5d79716e1490c4d06a245c6c7eff52c07b2d6f01e",
+        "good_wire_hex": "03ce726b9001f455f23b52ec19333fec236e4ee4370b20b594e402076709642c5c838dea596e5cbbd70c5dc9b40662024561bda9fab47a53ee2ab68d7e096c37e13f46f880d87568ce891183a6ed2ec35dc5d79716e1490c4d06a245c6c7eff52c07b2d6f01f",
+        "plaintext_hex": "7b2274797065223a226e6574776f726b73222c226e6574776f726b73223a5b7b2273736964223a22486f73706974616c222c227369676e616c223a38302c227365637572697479223a227770612d70736b227d5d7d"
+      }
+    }
+  },
+  "messages": {
+    "requests": [
+      {
+        "message": {
+          "kind": "scan"
+        },
+        "json": "{\"type\":\"scan\"}"
+      },
+      {
+        "message": {
+          "kind": "status"
+        },
+        "json": "{\"type\":\"status\"}"
+      },
+      {
+        "message": {
+          "kind": "provision",
+          "ssid": "Hospital",
+          "password": "correct horse"
+        },
+        "json": "{\"type\":\"provision\",\"ssid\":\"Hospital\",\"password\":\"correct horse\"}"
+      },
+      {
+        "message": {
+          "kind": "provision",
+          "ssid": "Open cafe"
+        },
+        "json": "{\"type\":\"provision\",\"ssid\":\"Open cafe\"}"
+      },
+      {
+        "message": {
+          "kind": "provision",
+          "ssid": "Café ☕",
+          "password": "pass word 123"
+        },
+        "json": "{\"type\":\"provision\",\"ssid\":\"Café ☕\",\"password\":\"pass word 123\"}"
+      }
+    ],
+    "responses": [
+      {
+        "message": {
+          "kind": "networks",
+          "networks": [
+            {
+              "ssid": "Hospital",
+              "signal": 80,
+              "security": "wpa-psk"
+            },
+            {
+              "ssid": "Guest",
+              "signal": 40,
+              "security": "open"
+            }
+          ]
+        },
+        "json": "{\"type\":\"networks\",\"networks\":[{\"ssid\":\"Hospital\",\"signal\":80,\"security\":\"wpa-psk\"},{\"ssid\":\"Guest\",\"signal\":40,\"security\":\"open\"}]}"
+      },
+      {
+        "message": {
+          "kind": "networks",
+          "networks": []
+        },
+        "json": "{\"type\":\"networks\",\"networks\":[]}"
+      },
+      {
+        "message": {
+          "kind": "accepted",
+          "dropsLink": false
+        },
+        "json": "{\"type\":\"accepted\"}"
+      },
+      {
+        "message": {
+          "kind": "accepted",
+          "dropsLink": true
+        },
+        "json": "{\"type\":\"accepted\",\"drops_link\":true}"
+      },
+      {
+        "message": {
+          "kind": "result",
+          "connected": true,
+          "ip": "192.168.1.50"
+        },
+        "json": "{\"type\":\"result\",\"connected\":true,\"ip\":\"192.168.1.50\"}"
+      },
+      {
+        "message": {
+          "kind": "result",
+          "connected": true
+        },
+        "json": "{\"type\":\"result\",\"connected\":true}"
+      },
+      {
+        "message": {
+          "kind": "result",
+          "connected": false,
+          "failure": "network_not_found"
+        },
+        "json": "{\"type\":\"result\",\"connected\":false,\"failure\":\"network_not_found\"}"
+      },
+      {
+        "message": {
+          "kind": "result",
+          "connected": false,
+          "failure": "wrong_password"
+        },
+        "json": "{\"type\":\"result\",\"connected\":false,\"failure\":\"wrong_password\"}"
+      },
+      {
+        "message": {
+          "kind": "result",
+          "connected": false,
+          "failure": "no_address"
+        },
+        "json": "{\"type\":\"result\",\"connected\":false,\"failure\":\"no_address\"}"
+      },
+      {
+        "message": {
+          "kind": "result",
+          "connected": false,
+          "failure": "timeout"
+        },
+        "json": "{\"type\":\"result\",\"connected\":false,\"failure\":\"timeout\"}"
+      },
+      {
+        "message": {
+          "kind": "result",
+          "connected": false,
+          "failure": "unsupported"
+        },
+        "json": "{\"type\":\"result\",\"connected\":false,\"failure\":\"unsupported\"}"
+      },
+      {
+        "message": {
+          "kind": "result",
+          "connected": false,
+          "failure": "other"
+        },
+        "json": "{\"type\":\"result\",\"connected\":false,\"failure\":\"other\"}"
+      },
+      {
+        "message": {
+          "kind": "last_attempt"
+        },
+        "json": "{\"type\":\"last_attempt\"}"
+      },
+      {
+        "message": {
+          "kind": "last_attempt",
+          "ssid": "Hospital",
+          "result": {
+            "connected": true,
+            "ip": "10.0.0.2"
+          }
+        },
+        "json": "{\"type\":\"last_attempt\",\"ssid\":\"Hospital\",\"connected\":true,\"ip\":\"10.0.0.2\"}"
+      },
+      {
+        "message": {
+          "kind": "last_attempt",
+          "ssid": "Café ☕",
+          "result": {
+            "connected": false,
+            "failure": "wrong_password"
+          }
+        },
+        "json": "{\"type\":\"last_attempt\",\"ssid\":\"Café ☕\",\"connected\":false,\"failure\":\"wrong_password\"}"
+      }
+    ],
+    "invalid_responses": [
+      "ok",
+      "[]",
+      "{\"type\":\"scan\"}",
+      "{\"type\":\"hello\"}",
+      "{\"type\":\"networks\",\"networks\":{}}",
+      "{\"type\":\"networks\",\"networks\":[\"Hospital\"]}",
+      "{\"type\":\"networks\",\"networks\":[{\"ssid\":\"a\",\"signal\":1,\"security\":\"open\",\"x\":1}]}",
+      "{\"type\":\"networks\",\"networks\":[{\"ssid\":\"a\",\"security\":\"open\"}]}",
+      "{\"type\":\"networks\",\"networks\":[{\"ssid\":\"a\",\"signal\":true,\"security\":\"open\"}]}",
+      "{\"type\":\"networks\",\"networks\":[{\"ssid\":\"a\",\"signal\":101,\"security\":\"open\"}]}",
+      "{\"type\":\"networks\",\"networks\":[{\"ssid\":\"a\",\"signal\":1,\"security\":\"wep\"}]}",
+      "{\"type\":\"accepted\",\"ssid\":\"Hospital\"}",
+      "{\"type\":\"accepted\",\"drops_link\":\"yes\"}",
+      "{\"type\":\"accepted\",\"drops_link\":1}",
+      "{\"type\":\"result\",\"connected\":\"yes\"}",
+      "{\"type\":\"result\",\"connected\":true,\"failure\":\"timeout\"}",
+      "{\"type\":\"result\",\"connected\":false}",
+      "{\"type\":\"result\",\"connected\":false,\"failure\":\"meteor\"}",
+      "{\"type\":\"result\",\"connected\":false,\"failure\":\"timeout\",\"ip\":\"10.0.0.2\"}",
+      "{\"type\":\"result\",\"connected\":true,\"ip\":\"not an address\"}",
+      "{\"type\":\"result\",\"connected\":true,\"ip\":3232235777}",
+      "{\"type\":\"last_attempt\",\"ssid\":\"Hospital\"}",
+      "{\"type\":\"last_attempt\",\"connected\":true}",
+      "{\"type\":\"last_attempt\",\"ssid\":\"\",\"connected\":true}",
+      "{\"type\":\"last_attempt\",\"ssid\":5,\"connected\":true}",
+      "{\"type\":\"last_attempt\",\"ssid\":\"Hospital\",\"connected\":false}",
+      "{\"type\":\"last_attempt\",\"ssid\":\"Hospital\",\"connected\":true,\"x\":1}"
+    ]
+  },
+  "wire": {
+    "reject": [
+      {
+        "hex": "04010000",
+        "reason": "auth_failed",
+        "retry_after": 0
+      },
+      {
+        "hex": "0402012c",
+        "reason": "locked",
+        "retry_after": 300
+      },
+      {
+        "hex": "04030000",
+        "reason": "busy",
+        "retry_after": 0
+      },
+      {
+        "hex": "0402ffff",
+        "reason": "locked",
+        "retry_after": 65535
+      }
+    ],
+    "invalid_reject": [
+      "",
+      "04",
+      "040100",
+      "0301000000",
+      "04630000",
+      "0401000000"
+    ]
+  }
+}

@@ -5,6 +5,9 @@ __pycache__/
 build/
 dist/
 
+# Node packages
+node_modules/
+
 # Virtual environments and tool caches
 .venv/
 .pytest_cache/
