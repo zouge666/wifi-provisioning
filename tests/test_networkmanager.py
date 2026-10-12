@@ -5,6 +5,8 @@ import os
 import pytest
 
 from wifiprov.device.networkmanager import (
+    ADDRESS_POLL,
+    DHCP_WAIT,
     PROFILE_PREFIX,
     NetworkManagerBackend,
     NetworkManagerError,
@@ -241,7 +243,9 @@ class FakeNmcli:
     wrong password fails at once, because the real one does not need to ask nmcli for it.
     """
 
-    def __init__(self, *, active=OLD, failure=None, add_failure=None, edit_fails=False, delay=0.0):
+    def __init__(
+        self, *, active=OLD, failure=None, add_failure=None, edit_fails=False, delay=0.0, late=0
+    ):
         self.networks = {
             "Hospital": (80, "WPA2"),
             "Guest": (40, ""),
@@ -255,6 +259,7 @@ class FakeNmcli:
         self.edit_fails = edit_fails  # the editor cannot save the password
         self.modify_failure = None  # what changing a connection fails with, if anything
         self.delay = delay
+        self.late = late  # how many looks at the new connection show no address yet
         self.calls = []
         self.inputs = []  # (arguments, standard input) of every call that got some input
 
@@ -306,9 +311,14 @@ class FakeNmcli:
             if self.active is None:
                 return "GENERAL.STATE:30 (disconnected)\nGENERAL.CONNECTION:\nGENERAL.CON-UUID:\n"
             name, uuid = self.active
+            address = "IP4.ADDRESS[1]:10.20.0.7/24\n"
+            if name.startswith(PROFILE_PREFIX) and self.late > 0:
+                # The real one says "connected" a moment before it shows the address.
+                self.late -= 1
+                address = ""
             return (
                 f"GENERAL.STATE:100 (connected)\nGENERAL.CONNECTION:{name}\n"
-                f"GENERAL.CON-UUID:{uuid}\nIP4.ADDRESS[1]:10.20.0.7/24\n"
+                f"GENERAL.CON-UUID:{uuid}\n{address}"
             )
         if "show" in args:  # the names of all connections
             return "".join(f"{name}\n" for name in [OLD[0], *self.profiles])
@@ -353,8 +363,19 @@ def credentials(ssid, password=PASSWORD):
     return WifiCredentials(ssid, Secret(password) if password else None)
 
 
-async def join(fake, ssid, password=PASSWORD):
-    return await NetworkManagerBackend(run=fake).connect(credentials(ssid, password))
+class Waits:
+    """A clock that does not wait. It adds up how long it was asked to wait."""
+
+    def __init__(self):
+        self.total = 0.0
+
+    async def __call__(self, seconds):
+        self.total += seconds
+
+
+async def join(fake, ssid, password=PASSWORD, waits=None):
+    backend = NetworkManagerBackend(run=fake, sleep=waits or Waits())
+    return await backend.connect(credentials(ssid, password))
 
 
 async def test_joining_with_the_right_password_works():
@@ -366,6 +387,31 @@ async def test_joining_with_the_right_password_works():
     assert set(fake.profiles) == {name}  # the connection we made is kept
     assert fake.profiles[name]["autoconnect"] == "yes"  # and it starts by itself after a reboot
     assert ["connection", "delete", "id", OLD[0]] not in fake.calls  # the old one is left alone
+
+
+async def test_an_address_that_shows_up_a_moment_late_is_waited_for():
+    fake = FakeNmcli(late=3)
+    waits = Waits()
+    result = await join(fake, "Hospital", waits=waits)
+    assert result == ConnectResult(True, ip="10.20.0.7")
+    assert waits.total == 3 * ADDRESS_POLL
+    assert len(fake.profiles) == 1  # the connection was kept
+
+
+async def test_an_address_that_is_there_at_once_costs_no_waiting():
+    waits = Waits()
+    await join(FakeNmcli(), "Hospital", waits=waits)
+    assert waits.total == 0
+
+
+async def test_a_connection_that_never_gets_an_address_goes_back_after_the_wait():
+    fake = FakeNmcli(late=10**6)
+    waits = Waits()
+    result = await join(fake, "Hospital", waits=waits)
+    assert result == ConnectResult(False, Failure.NO_ADDRESS)
+    assert waits.total == DHCP_WAIT
+    assert fake.active == OLD
+    assert fake.profiles == {}
 
 
 async def test_the_connection_does_not_start_by_itself_until_it_has_worked():

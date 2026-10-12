@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 NMCLI_TIMEOUT = 20.0
 JOIN_WAIT = 30  # seconds nmcli may wait for a network to accept us
 DHCP_WAIT = 20  # seconds the network has to give us an address
+ADDRESS_POLL = 0.5  # seconds between two looks for the address
 STATE_CONNECTED = 100  # NetworkManager's number for "the adapter has a working connection"
 STATUS_FIELDS = "GENERAL.STATE,GENERAL.CONNECTION,GENERAL.CON-UUID,IP4.ADDRESS"
 PROFILE_PREFIX = "wifiprov-"  # every connection we create starts with this
@@ -183,9 +184,16 @@ class NetworkManagerBackend:
     polkit, and a normal user over SSH is refused.
     """
 
-    def __init__(self, interface: str | None = None, *, run: Runner = run_nmcli) -> None:
+    def __init__(
+        self,
+        interface: str | None = None,
+        *,
+        run: Runner = run_nmcli,
+        sleep: Callable[[float], Awaitable[object]] = asyncio.sleep,
+    ) -> None:
         self._interface = interface
         self._run = run
+        self._sleep = sleep
         self._busy = asyncio.Lock()  # one attempt at a time, even while an old one cleans up
 
     async def scan(self) -> list[WifiNetwork]:
@@ -231,7 +239,8 @@ class NetworkManagerBackend:
                 await self._forget_other_profiles(keep=name)
             else:
                 await self._go_back(interface, name, before)
-            logger.info("joining a network %s", "worked" if result.connected else "failed")
+            outcome = "worked" if result.connected else f"failed ({result.failure})"
+            logger.info("joining a network %s", outcome)
             return result
 
     async def _join(
@@ -255,7 +264,7 @@ class NetworkManagerBackend:
             return ConnectResult(False, classify_failure(str(error), password))
 
         try:
-            status = await self.status()
+            status = await self._status_with_address(name)
         except NetworkManagerError:
             return ConnectResult(False, Failure.OTHER)
         if not status.connected or status.connection != name:
@@ -269,6 +278,20 @@ class NetworkManagerBackend:
         except NetworkManagerError:
             return ConnectResult(False, Failure.OTHER)
         return ConnectResult(True, ip=status.ip)
+
+    async def _status_with_address(self, name: str) -> WifiStatus:
+        # NetworkManager says "connected" a moment before it shows the address. On the real
+        # laptop the first look came too early and a working connection was thrown away.
+        # So look again for a while.
+        status = await self.status()
+        waited = 0.0
+        while status.connected and status.connection == name and status.ip is None:
+            if waited >= DHCP_WAIT:
+                break
+            await self._sleep(ADDRESS_POLL)
+            waited += ADDRESS_POLL
+            status = await self.status()
+        return status
 
     async def _set_password(self, name: str, password: str) -> None:
         # The password goes to the editor of nmcli on standard input, so it is never in the

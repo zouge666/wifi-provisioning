@@ -2,6 +2,8 @@ import asyncio
 import getpass
 import io
 import os
+import signal
+import socket
 import stat
 import subprocess
 import sys
@@ -9,7 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from wifiprov.cli import DEMO_NETWORKS, main
+from wifiprov.cli import DEMO_NETWORKS, _has_network, _serve_in_windows, main
 from wifiprov.device.agent import DeviceAgent
 from wifiprov.device.fake import FakeBackend
 from wifiprov.device.lockout import Lockout
@@ -126,8 +128,18 @@ def test_device_refuses_to_start_without_an_identity(tmp_path, capsys):
 
 @pytest.mark.parametrize(
     "extra",
-    [["--listen", "nonsense"], ["--listen", "host:99999"], ["--fake-network", "no-equals-sign"]],
-    ids=["no port", "port out of range", "fake network without a password"],
+    [
+        ["--listen", "nonsense"],
+        ["--listen", "host:99999"],
+        ["--fake-network", "no-equals-sign"],
+        ["--backend", "nm", "--fake-open-network", "Guest"],
+    ],
+    ids=[
+        "no port",
+        "port out of range",
+        "fake network without a password",
+        "fake network with the real adapter",
+    ],
 )
 def test_device_refuses_to_start_with_bad_options(tmp_path, capsys, extra):
     path = tmp_path / "identity.json"
@@ -472,3 +484,81 @@ def test_the_wifi_password_cannot_be_given_on_the_command_line_of_join():
     with pytest.raises(SystemExit) as exit_:
         main(["join", "--ssid", "Hospital", "--password", PASSWORD])
     assert exit_.value.code == 2
+
+
+# ------------------------------------------------------------------------ device window
+
+
+@pytest.mark.parametrize(
+    ("status", "online"),
+    [
+        (WifiStatus("wlp2s0", 100, "Hospital", "10.20.0.7"), True),
+        (WifiStatus("wlp2s0", 100, "Hospital", None), False),
+        (WifiStatus("wlp2s0", 30, None, None), False),
+        (NetworkManagerError("NetworkManager sees no Wi-Fi adapter"), False),
+    ],
+    ids=["connected with an address", "connected without an address", "not connected", "error"],
+)
+async def test_the_device_is_online_only_with_a_connection_and_an_address(status, online):
+    class Adapter:
+        async def status(self):
+            if isinstance(status, Exception):
+                raise status
+            return status
+
+    assert await _has_network(Adapter()) is online
+
+
+async def test_the_pretend_adapter_is_online_when_it_has_joined_a_network():
+    assert not await _has_network(FakeBackend(DEMO_NETWORKS))
+    assert await _has_network(FakeBackend(DEMO_NETWORKS, connected_to="Old network"))
+
+
+async def listening(port):
+    try:
+        _, writer = await asyncio.open_connection("127.0.0.1", port)
+    except OSError:
+        return False
+    writer.close()
+    return True
+
+
+async def wait_until(condition, *args):
+    for _ in range(200):
+        if await condition(*args):
+            return
+        await asyncio.sleep(0.02)
+    raise AssertionError("it did not happen in time")
+
+
+async def not_listening(port):
+    return not await listening(port)
+
+
+@posix_only
+async def test_the_device_listens_only_while_the_window_is_open(
+    identity, ticket_file, monkeypatch, capsys
+):
+    monkeypatch.setattr("wifiprov.cli.NETWORK_WAIT", 0)
+    backend = FakeBackend(DEMO_NETWORKS)  # a device without a network
+    agent = DeviceAgent(identity, backend, receive_timeout=2.0, connect_timeout=2.0)
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    device = SimpleNamespace(port=port)
+    serving = asyncio.create_task(
+        _serve_in_windows(identity, agent, backend, "127.0.0.1", port, 60)
+    )
+    try:
+        await wait_until(listening, port)  # no network, so the window opens
+        monkeypatch.setattr(sys, "stdin", io.StringIO(PASSWORD + "\n"))
+        args = configure_args(ticket_file, device, "--ssid", "Hospital WiFi", "--password-stdin")
+        assert await run(*args) == 0
+        await wait_until(not_listening, port)  # it has a network now, so the window closes
+
+        os.kill(os.getpid(), signal.SIGUSR1)  # the stand-in for the button
+        await wait_until(listening, port)
+    finally:
+        serving.cancel()
+    await asyncio.gather(serving, return_exceptions=True)
+    assert not await listening(port)

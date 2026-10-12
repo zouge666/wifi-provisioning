@@ -18,6 +18,7 @@ import contextlib
 import getpass
 import logging
 import os
+import signal
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -29,12 +30,14 @@ from wifiprov.configurator.client import (
     NotTheExpectedDevice,
     ProvisioningError,
 )
-from wifiprov.device.agent import DeviceAgent
+from wifiprov.device.agent import DeviceAgent, Outcome
 from wifiprov.device.fake import FakeBackend, FakeNetwork
 from wifiprov.device.networkmanager import NetworkManagerBackend, NetworkManagerError
+from wifiprov.device.window import Window
 from wifiprov.identity import DeviceIdentity, IdentityError
 from wifiprov.secret import Secret
 from wifiprov.ticket import Ticket, TicketError
+from wifiprov.transport.base import Transport
 from wifiprov.transport.tcp import connect_tcp, serve_tcp
 from wifiprov.wifi import Failure, Security, WifiCredentials, WifiNetwork, describe_failure
 from wifiprov.wire import RejectReason
@@ -52,6 +55,7 @@ DEMO_NETWORKS = {
     "Guest": FakeNetwork(None, signal=40, ip="192.168.50.4"),
 }
 MAX_PASSWORD_PROMPTS = 3
+NETWORK_WAIT = 30.0  # seconds a device waits for its network after a start
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -80,9 +84,27 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     init.set_defaults(run=_run_init)
 
-    device = commands.add_parser("device", help="run the device side with a fake Wi-Fi adapter")
+    device = commands.add_parser("device", help="run the device side")
     device.add_argument("--identity", required=True, metavar="FILE")
     device.add_argument("--listen", default=DEFAULT_ADDRESS, metavar="HOST:PORT")
+    device.add_argument(
+        "--backend",
+        choices=["fake", "nm"],
+        default="fake",
+        help="the Wi-Fi adapter: a pretend one, or the real one through NetworkManager",
+    )
+    device.add_argument(
+        "--interface",
+        metavar="NAME",
+        help="the Wi-Fi adapter for --backend nm; by default the first one",
+    )
+    device.add_argument(
+        "--window",
+        type=float,
+        default=0,
+        metavar="SECONDS",
+        help="listen only this long, and only while the device has no network; 0 means always",
+    )
     device.add_argument(
         "--fake-network",
         action="append",
@@ -172,30 +194,88 @@ def _run_device(args: argparse.Namespace) -> int:
     try:
         identity = DeviceIdentity.load(args.identity)
         host, port = _parse_address(args.listen)
-        backend = _fake_backend(args.fake_network, args.fake_open_network)
+        backend = _device_backend(args)
     except (OSError, IdentityError, ValueError) as error:
         print(f"Cannot start the device: {error}", file=sys.stderr)
         return EXIT_BAD_INPUT
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     with contextlib.suppress(AttributeError):  # show output at once, even when redirected
         sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]
-    asyncio.run(_serve_device(identity, backend, host, port))
+    asyncio.run(_serve_device(identity, backend, host, port, args.window))
     return EXIT_JOINED
 
 
 async def _serve_device(
-    identity: DeviceIdentity, backend: FakeBackend, host: str, port: int
+    identity: DeviceIdentity,
+    backend: FakeBackend | NetworkManagerBackend,
+    host: str,
+    port: int,
+    window_seconds: float,
 ) -> None:
     agent = DeviceAgent(identity, backend)
+    if window_seconds > 0:
+        await _serve_in_windows(identity, agent, backend, host, port, window_seconds)
+        return
     server = await serve_tcp(agent.serve, host, port)
     address = server.sockets[0].getsockname()
     print(f"Device {identity.device_id} is listening on {address[0]}:{address[1]}")
-    print("It uses a fake Wi-Fi adapter: nothing on this machine will change. Pretend networks:")
-    for ssid, network in backend.networks.items():
-        password = "open" if network.password is None else f"password: {network.password}"
-        print(f"  {ssid} ({password})")
+    if isinstance(backend, FakeBackend):
+        print(
+            "It uses a fake Wi-Fi adapter: nothing on this machine will change. Pretend networks:"
+        )
+        for ssid, network in backend.networks.items():
+            password = "open" if network.password is None else f"password: {network.password}"
+            print(f"  {ssid} ({password})")
+    else:
+        print("It uses the Wi-Fi adapter of this machine, through NetworkManager.")
     async with server:
         await server.serve_forever()
+
+
+async def _serve_in_windows(
+    identity: DeviceIdentity,
+    agent: DeviceAgent,
+    backend: FakeBackend | NetworkManagerBackend,
+    host: str,
+    port: int,
+    seconds: float,
+) -> None:
+    async def handle(transport: Transport) -> None:
+        if await agent.serve(transport) is Outcome.CONNECTED:
+            window.provisioned()
+
+    async def has_network() -> bool:
+        return await _has_network(backend)
+
+    window = Window(
+        lambda: serve_tcp(handle, host, port), has_network, seconds=seconds, grace=NETWORK_WAIT
+    )
+    reopen = asyncio.Event()
+    # SIGUSR1 opens the window again. It stands in for a button on the device.
+    with contextlib.suppress(NotImplementedError):
+        asyncio.get_running_loop().add_signal_handler(signal.SIGUSR1, reopen.set)
+    logging.getLogger(__name__).info(
+        "device %s: the window opens for %s seconds when there is no network, "
+        "and SIGUSR1 opens it again",
+        identity.device_id,
+        seconds,
+    )
+    force = False
+    while True:
+        await window.run(force=force)
+        await reopen.wait()
+        reopen.clear()
+        force = True
+
+
+async def _has_network(backend: FakeBackend | NetworkManagerBackend) -> bool:
+    if isinstance(backend, FakeBackend):
+        return backend.connected_to is not None
+    try:
+        status = await backend.status()
+    except NetworkManagerError:
+        return False
+    return status.connected and status.ip is not None
 
 
 def _fake_backend(secured: list[str] | None, open_networks: list[str] | None) -> FakeBackend:
@@ -210,6 +290,14 @@ def _fake_backend(secured: list[str] | None, open_networks: list[str] | None) ->
     for ssid in open_networks or []:
         networks[ssid] = FakeNetwork(None, signal=max(20, 80 - 10 * len(networks)))
     return FakeBackend(networks)
+
+
+def _device_backend(args: argparse.Namespace) -> FakeBackend | NetworkManagerBackend:
+    if args.backend == "nm":
+        if args.fake_network or args.fake_open_network:
+            raise ValueError("--fake-network and --fake-open-network go with --backend fake")
+        return NetworkManagerBackend(args.interface)
+    return _fake_backend(args.fake_network, args.fake_open_network)
 
 
 # ------------------------------------------------------------------------ configure

@@ -1,0 +1,37 @@
+[Unit]
+Description=Wi-Fi provisioning agent
+Wants=NetworkManager.service
+After=NetworkManager.service
+
+[Service]
+ExecStart=/opt/wifiprov/bin/wifiprov device --backend nm --identity /var/lib/wifiprov/identity.json --listen 127.0.0.1:8765 --window 600
+Restart=on-failure
+RestartSec=5
+# The identity of the device is kept here. Only root can read it.
+StateDirectory=wifiprov
+StateDirectoryMode=0700
+UMask=0077
+
+# NetworkManager only lets root, or a person at the machine, change the network.
+# So the agent runs as root, and everything else about it is locked down.
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target
