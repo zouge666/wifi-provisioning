@@ -62,7 +62,8 @@ class Phone:
     async def join(self, request):
         """Join a network: the device first says it has the details, then how it went."""
         await self.say(request)
-        assert await self.hear() == ProvisionAccepted()
+        self.accepted = await self.hear()
+        assert isinstance(self.accepted, ProvisionAccepted)
         return await self.hear()
 
 
@@ -442,6 +443,7 @@ async def test_when_joining_cuts_the_link_the_conversation_ends_after_a_failed_a
     await phone.handshake()
 
     result = await phone.join(join(password="not the right one"))
+    assert phone.accepted.drops_link  # the device says so, so nobody waits for a result
     assert result == ConnectResult(False, Failure.WRONG_PASSWORD)
     assert await task is Outcome.FAILED  # nobody had to hang up first
     assert agent.state is State.IDLE
@@ -463,3 +465,12 @@ async def test_a_join_that_works_is_still_a_success_when_it_cuts_the_link(identi
     await phone.handshake()
     assert (await phone.join(join())).connected
     assert await task is Outcome.CONNECTED
+
+
+async def test_an_ordinary_device_does_not_announce_a_cut_link(agent, ticket):
+    phone_end, _, task = connect(agent)
+    phone = Phone(ticket, phone_end)
+    await phone.handshake()
+    await phone.join(join())
+    assert phone.accepted == ProvisionAccepted(drops_link=False)
+    await task

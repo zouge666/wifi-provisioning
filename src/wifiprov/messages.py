@@ -56,9 +56,11 @@ class StatusRequest:
 class ProvisionAccepted:
     """Device to configurator: I have the Wi-Fi details and I am going to try them now.
 
-    Joining may mean leaving the network the device talks to the configurator on, so the
-    link can be gone before the result is sent.
+    Joining may mean leaving the network the device talks to the configurator on. When
+    ``drops_link`` is true the link will be gone, so there is no result to wait for.
     """
+
+    drops_link: bool = False
 
 
 @dataclass(frozen=True)
@@ -100,6 +102,8 @@ def encode(message: Request | Response) -> bytes:
         }
     elif isinstance(message, ProvisionAccepted):
         document = {"type": "accepted"}
+        if message.drops_link:
+            document["drops_link"] = True
     elif isinstance(message, ConnectResult):
         document = {"type": "result", **_result_fields(message)}
     elif isinstance(message, Status):
@@ -148,8 +152,11 @@ def decode_response(data: bytes) -> Response:
         except ValueError:
             raise MessageError("the network list is not valid") from None
     if kind == "accepted":
-        _expect_keys(document, {"type"})
-        return ProvisionAccepted()
+        _expect_keys(document, {"type"}, optional={"drops_link"})
+        drops_link = document.get("drops_link", False)
+        if type(drops_link) is not bool:
+            raise MessageError("drops_link must be true or false")
+        return ProvisionAccepted(drops_link)
     if kind == "result":
         return _read_result(document)
     if kind == "last_attempt":

@@ -145,7 +145,7 @@ class DeviceAgent:
             else:
                 attempted = joined = True
                 # Joining may cut the link, so the configurator hears this first.
-                await self._send(transport, session, ProvisionAccepted())
+                await self._send(transport, session, ProvisionAccepted(self._backend.drops_link))
                 self.state = State.APPLYING
                 reply = await self._connect(request.credentials)
                 self.last_attempt = (request.credentials.ssid, reply)

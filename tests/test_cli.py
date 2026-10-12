@@ -319,7 +319,9 @@ async def test_nothing_listening_is_reported(ticket_file, capsys):
         "Guest",
     )
     assert code == 3
-    assert "Could not reach a device" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "Could not reach a device" in err
+    assert "wifiprov-" in err  # the Wi-Fi network a new device makes itself
 
 
 @pytest.mark.parametrize(
@@ -665,7 +667,9 @@ async def test_status_with_nothing_listening_is_reported(ticket_file, capsys):
     await server.wait_closed()
     code = await run("status", "--ticket-file", str(ticket_file), "--connect", f"127.0.0.1:{port}")
     assert code == 3
-    assert "Could not reach a device" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "Could not reach a device" in err
+    assert "wifiprov-" in err
 
 
 def test_status_with_a_bad_ticket_is_bad_input(tmp_path, capsys):

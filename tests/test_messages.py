@@ -46,6 +46,7 @@ def test_requests_round_trip(message):
         NETWORKS,
         NetworkList(()),
         ProvisionAccepted(),
+        ProvisionAccepted(drops_link=True),
         Status(),
         Status("Hospital", ConnectResult(True, ip="10.0.0.2")),
         *[Status("Café ☕", ConnectResult(False, failure)) for failure in Failure],
@@ -80,6 +81,7 @@ def test_the_wire_format_is_compact_json_with_a_type():
     )
     assert encode(StatusRequest()) == b'{"type":"status"}'
     assert encode(ProvisionAccepted()) == b'{"type":"accepted"}'
+    assert encode(ProvisionAccepted(drops_link=True)) == b'{"type":"accepted","drops_link":true}'
     assert encode(Status()) == b'{"type":"last_attempt"}'
     assert encode(Status("Hospital", ConnectResult(False, Failure.TIMEOUT))) == (
         b'{"type":"last_attempt","ssid":"Hospital","connected":false,"failure":"timeout"}'
@@ -174,6 +176,8 @@ BAD_RESPONSES = {
     "address in another spelling": b'{"type":"result","connected":true,"ip":"::FFFF:1.2.3.4"}',
     "address is a number": b'{"type":"result","connected":true,"ip":3232235777}',
     "accepted with a field": b'{"type":"accepted","ssid":"Hospital"}',
+    "accepted with a flag that is not a boolean": b'{"type":"accepted","drops_link":"yes"}',
+    "accepted with a flag that is a number": b'{"type":"accepted","drops_link":1}',
     "last attempt with a name only": b'{"type":"last_attempt","ssid":"Hospital"}',
     "last attempt with a result only": b'{"type":"last_attempt","connected":true}',
     "last attempt with an empty name": b'{"type":"last_attempt","ssid":"","connected":true}',

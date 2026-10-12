@@ -354,11 +354,24 @@ async def test_a_new_session_reads_the_result_of_an_attempt_that_cut_the_link(
     )
     phone_end, _, task = start(agent)
     async with Configurator(ticket, phone_end, timeout=1.0) as phone:
-        failed = await phone.join(join_request("not the right one"))
-    assert failed == ConnectResult(False, Failure.WRONG_PASSWORD)
+        # The device says the link will be cut, so the phone does not wait for a result.
+        assert await phone.join(join_request("not the right one")) is None
     assert await task is Outcome.FAILED
 
     phone_end, _, task = start(agent)
     async with Configurator(ticket, phone_end, timeout=1.0) as phone:
         assert await phone.status() == Status(SSID, ConnectResult(False, Failure.WRONG_PASSWORD))
     await task
+
+
+async def test_a_device_that_says_the_link_will_be_cut_is_not_waited_for(identity, ticket):
+    def answer(request):
+        if isinstance(request, ScanRequest):
+            return NetworkList((WifiNetwork(SSID, 80, Security.WPA_PSK),))
+        return ProvisionAccepted(drops_link=True)  # and no result ever follows
+
+    phone_end, _, task = start_stub(identity, answer)
+    async with Configurator(ticket, phone_end, timeout=1.0, join_timeout=60.0) as phone:
+        # Without the hint this would wait for the whole join timeout.
+        assert await asyncio.wait_for(phone.join(join_request()), 2.0) is None
+    task.cancel()

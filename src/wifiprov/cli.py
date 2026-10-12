@@ -31,7 +31,7 @@ from wifiprov.configurator.client import (
     NotTheExpectedDevice,
     ProvisioningError,
 )
-from wifiprov.device.accesspoint import AccessPointBackend
+from wifiprov.device.accesspoint import AccessPointBackend, access_point_name
 from wifiprov.device.agent import DeviceAgent, Outcome
 from wifiprov.device.fake import FakeBackend, FakeNetwork
 from wifiprov.device.networkmanager import AP_PROFILE, NetworkManagerBackend, NetworkManagerError
@@ -254,7 +254,7 @@ async def _serve_device(
     access_point: bool = False,
 ) -> None:
     if access_point and isinstance(backend, NetworkManagerBackend):
-        wifi = AccessPointBackend(backend, f"wifiprov-{identity.device_id}")
+        wifi = AccessPointBackend(backend, access_point_name(identity.device_id))
         agent = DeviceAgent(identity, wifi, connect_timeout=AP_CONNECT_TIMEOUT)
         await _serve_in_windows(identity, agent, backend, host, port, window_seconds, wifi)
         return
@@ -391,7 +391,7 @@ async def _configure(args: argparse.Namespace, ticket: Ticket, host: str, port: 
     try:
         transport = await connect_tcp(host, port)
     except OSError:
-        print(f"Could not reach a device at {host}:{port}.", file=sys.stderr)
+        _say_not_reachable(ticket, host, port)
         return EXIT_NO_DEVICE
     try:
         async with Configurator(ticket, transport, timeout=args.timeout) as phone:
@@ -478,6 +478,15 @@ def _read_ticket(args: argparse.Namespace) -> Ticket:
     return Ticket.from_uri(text)
 
 
+def _say_not_reachable(ticket: Ticket, host: str, port: int) -> None:
+    print(f"Could not reach a device at {host}:{port}.", file=sys.stderr)
+    print(
+        "If the device is new, join the Wi-Fi network it makes itself, "
+        f"{access_point_name(ticket.device_id)}, and try again.",
+        file=sys.stderr,
+    )
+
+
 def _describe(error: ProvisioningError) -> str:
     if isinstance(error, DeviceRefused):
         if error.reason is RejectReason.AUTH_FAILED:
@@ -520,7 +529,7 @@ async def _status(args: argparse.Namespace, ticket: Ticket, host: str, port: int
     try:
         transport = await connect_tcp(host, port)
     except OSError:
-        print(f"Could not reach a device at {host}:{port}.", file=sys.stderr)
+        _say_not_reachable(ticket, host, port)
         return EXIT_NO_DEVICE
     try:
         async with Configurator(ticket, transport, timeout=args.timeout) as phone:

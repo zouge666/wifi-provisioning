@@ -11,6 +11,11 @@ from wifiprov.wifi import ConnectResult, WifiCredentials, WifiNetwork
 logger = logging.getLogger(__name__)
 
 
+def access_point_name(device_id: str) -> str:
+    """The name of the Wi-Fi network a device makes, from the id on its sticker."""
+    return f"wifiprov-{device_id}"
+
+
 class AccessPointBackend:
     """Lets a phone talk to the device over a Wi-Fi network that the device makes itself.
 

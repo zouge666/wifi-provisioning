@@ -118,14 +118,17 @@ class Configurator:
 
         The result is None when the device took the details but the link went away before
         it could say how it went. That is normal when the two talk over the device's own
-        Wi-Fi network, because the device leaves that network to join the other one. Use
-        ``status`` after the device is reachable again.
+        Wi-Fi network, because the device leaves that network to join the other one. The
+        device says so in its answer, and then there is nothing to wait for. Use ``status``
+        after the device is reachable again.
         """
         if not self._confirmed:
             await self.scan()
         accepted = await self._ask(ProvisionRequest(credentials), self._timeout)
         if not isinstance(accepted, ProvisionAccepted):
             raise ProtocolProblem("the device answered a join request with something else")
+        if accepted.drops_link:
+            return None
         try:
             result = await self._read_reply(self._join_timeout)
         except DeviceUnreachable:
