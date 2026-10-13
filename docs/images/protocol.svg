@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 1690" width="960" role="img" aria-label="How the phone and the device talk, and what the packets look like">
+<defs><marker id="head" markerWidth="12" markerHeight="10" refX="11" refY="5" orient="auto"><path d="M0,0 L12,5 L0,10 z" fill="#000"/></marker></defs>
+<rect width="960" height="1690" fill="#fff"/>
+<text x="30" y="40" font-family="Helvetica, Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="start" fill="#000">How the phone and the device talk</text>
+<text x="30" y="66" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="normal" text-anchor="start" fill="#000">One conversation over the open Wi-Fi network of the device. Anything secret is locked before it is sent.</text>
+<rect x="100" y="88" width="300" height="38" fill="#000" stroke="#000" stroke-width="1.5"/>
+<text x="250" y="113" font-family="Helvetica, Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#fff">DEVICE (Linux)</text>
+<rect x="560" y="88" width="300" height="38" fill="#000" stroke="#000" stroke-width="1.5"/>
+<text x="710" y="113" font-family="Helvetica, Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#fff">PHONE (web page in a browser)</text>
+<rect x="30" y="142" width="400" height="96" fill="#f2f2f2" stroke="#000" stroke-width="1.5"/>
+<text x="44" y="164" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="bold" text-anchor="start" fill="#000">The device knows from the start:</text>
+<text x="44" y="186" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" text-anchor="start" fill="#000">its private key (it never leaves the device)</text>
+<text x="44" y="205" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" text-anchor="start" fill="#000">its public key (printed on the sticker)</text>
+<text x="44" y="224" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" text-anchor="start" fill="#000">the setup code (printed on the sticker)</text>
+<rect x="530" y="142" width="400" height="96" fill="#f2f2f2" stroke="#000" stroke-width="1.5"/>
+<text x="544" y="164" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="bold" text-anchor="start" fill="#000">The phone knows from the QR code:</text>
+<text x="544" y="186" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" text-anchor="start" fill="#000">the public key of the device</text>
+<text x="544" y="205" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" text-anchor="start" fill="#000">the setup code</text>
+<text x="544" y="224" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" text-anchor="start" fill="#000">it has no private key at all</text>
+<line x1="250" y1="238" x2="250" y2="1086" stroke="#000" stroke-width="1.2" stroke-dasharray="5 5"/>
+<line x1="710" y1="238" x2="710" y2="1086" stroke="#000" stroke-width="1.2" stroke-dasharray="5 5"/>
+<rect x="150" y="256" width="660" height="50" fill="#fff" stroke="#000" stroke-width="1.5" stroke-dasharray="6 4"/>
+<text x="480" y="277" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#000">0  The phone joins the open Wi-Fi network wifiprov-&lt;ID&gt; and opens the page</text>
+<text x="480" y="297" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12" font-weight="normal" text-anchor="middle" fill="#000">http://10.42.0.1:8080/#  and the sticker text, read by the camera</text>
+<line x1="256" y1="356" x2="704" y2="356" stroke="#000" stroke-width="2" marker-end="url(#head)"/>
+<text x="480" y="344" font-family="Helvetica, Arial, sans-serif" font-size="15" font-weight="bold" text-anchor="middle" fill="#000">1  HELLO</text>
+<text x="480" y="380" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12" font-weight="normal" text-anchor="middle" fill="#000">fresh public key + signature</text>
+<text x="30" y="338" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" text-anchor="start" fill="#000">makes a fresh key pair</text>
+<text x="30" y="354" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" text-anchor="start" fill="#000">(used once)</text>
+<text x="738" y="338" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" text-anchor="start" fill="#000">checks the signature with</text>
+<text x="738" y="354" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" text-anchor="start" fill="#000">the key from the sticker.</text>
+<text x="738" y="370" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" text-anchor="start" fill="#000">Wrong? It stops.</text>
+<line x1="704" y1="466" x2="256" y2="466" stroke="#000" stroke-width="2" marker-end="url(#head)"/>
+<text x="480" y="454" font-family="Helvetica, Arial, sans-serif" font-size="15" font-weight="bold" text-anchor="middle" fill="#000">2  KEYSHARE</text>
+<text x="480" y="490" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12" font-weight="normal" text-anchor="middle" fill="#000">the fresh public key of the phone</text>
+<text x="30" y="448" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" text-anchor="start" fill="#000">waits</text>
+<text x="738" y="448" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" text-anchor="start" fill="#000">makes a fresh key pair</text>
+<text x="738" y="464" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" text-anchor="start" fill="#000">(used once)</text>
+<rect x="150" y="514" width="660" height="104" fill="#f2f2f2" stroke="#000" stroke-width="2.5"/>
+<text x="480" y="540" font-family="Helvetica, Arial, sans-serif" font-size="15" font-weight="bold" text-anchor="middle" fill="#000">3  Both sides work out the keys on their own</text>
+<text x="480" y="564" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" text-anchor="middle" fill="#000">shared secret (X25519) + setup code + hash of the talk so far  →  HKDF</text>
+<text x="480" y="586" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" text-anchor="middle" fill="#000">key A (phone to device)   ·   key B (device to phone)</text>
+<text x="480" y="608" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="#000">The setup code is used here. It is never sent.</text>
+<line x1="704" y1="696" x2="256" y2="696" stroke="#000" stroke-width="2" marker-end="url(#head)"/>
+<text x="480" y="684" font-family="Helvetica, Arial, sans-serif" font-size="15" font-weight="bold" text-anchor="middle" fill="#000">4  DATA  (locked with key A)</text>
+<text x="480" y="720" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12" font-weight="normal" text-anchor="middle" fill="#000">{"type":"scan"}</text>
+<text x="30" y="678" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" text-anchor="start" fill="#000">opens? Yes: go on.</text>
+<text x="30" y="694" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" text-anchor="start" fill="#000">No: REJECT and count it.</text>
+<text x="30" y="710" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" text-anchor="start" fill="#000">5 fails: locked 5 min.</text>
+<text x="738" y="678" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" text-anchor="start" fill="#000">the phone speaks first,</text>
+<text x="738" y="694" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" text-anchor="start" fill="#000">the device stays silent</text>
+<text x="738" y="710" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" text-anchor="start" fill="#000">until one message opens</text>
+<line x1="256" y1="806" x2="704" y2="806" stroke="#000" stroke-width="2" marker-end="url(#head)"/>
+<text x="480" y="794" font-family="Helvetica, Arial, sans-serif" font-size="15" font-weight="bold" text-anchor="middle" fill="#000">5  DATA  (locked with key B)</text>
+<text x="480" y="830" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12" font-weight="normal" text-anchor="middle" fill="#000">{"type":"networks","networks":[…]}</text>
+<text x="30" y="788" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" text-anchor="start" fill="#000">the list of Wi-Fi networks</text>
+<text x="30" y="804" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" text-anchor="start" fill="#000">the device can see</text>
+<text x="738" y="788" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" text-anchor="start" fill="#000">you pick a network</text>
+<text x="738" y="804" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" text-anchor="start" fill="#000">and type its password</text>
+<line x1="704" y1="916" x2="256" y2="916" stroke="#000" stroke-width="2" marker-end="url(#head)"/>
+<text x="480" y="904" font-family="Helvetica, Arial, sans-serif" font-size="15" font-weight="bold" text-anchor="middle" fill="#000">6  DATA  (locked with key A)</text>
+<text x="480" y="940" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12" font-weight="normal" text-anchor="middle" fill="#000">{"type":"provision","ssid":"…","password":"…"}</text>
+<text x="30" y="898" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" text-anchor="start" fill="#000">the Wi-Fi password</text>
+<text x="30" y="914" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" text-anchor="start" fill="#000">is only in here, locked</text>
+<text x="738" y="898" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" text-anchor="start" fill="#000">sends name and</text>
+<text x="738" y="914" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" text-anchor="start" fill="#000">password</text>
+<line x1="256" y1="1026" x2="704" y2="1026" stroke="#000" stroke-width="2" marker-end="url(#head)"/>
+<text x="480" y="1014" font-family="Helvetica, Arial, sans-serif" font-size="15" font-weight="bold" text-anchor="middle" fill="#000">7  DATA  (locked with key B)</text>
+<text x="480" y="1050" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12" font-weight="normal" text-anchor="middle" fill="#000">{"type":"accepted","drops_link":true}</text>
+<text x="30" y="1008" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" text-anchor="start" fill="#000">leaves its own Wi-Fi and</text>
+<text x="30" y="1024" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" text-anchor="start" fill="#000">joins the hospital Wi-Fi</text>
+<text x="738" y="1008" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" text-anchor="start" fill="#000">the page loses contact</text>
+<text x="738" y="1024" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" text-anchor="start" fill="#000">with the device</text>
+<rect x="30" y="1104" width="900" height="64" fill="#fff" stroke="#000" stroke-width="1.5" stroke-dasharray="6 4"/>
+<text x="480" y="1129" font-family="Helvetica, Arial, sans-serif" font-size="15" font-weight="bold" text-anchor="middle" fill="#000">8  The result</text>
+<text x="480" y="1152" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" text-anchor="middle" fill="#000">Joined: the device stays on the hospital Wi-Fi.   Failed: it opens its own Wi-Fi again, and the phone can ask {"type":"status"}.</text>
+<text x="30" y="1216" font-family="Helvetica, Arial, sans-serif" font-size="20" font-weight="bold" text-anchor="start" fill="#000">The packets</text>
+<text x="30" y="1238" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="normal" text-anchor="start" fill="#000">Every message starts with one byte that tells what it is. The numbers in the boxes are sizes in bytes.</text>
+<text x="30" y="1271" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="start" fill="#000">HELLO   98 bytes   device to phone</text>
+<rect x="30" y="1283" width="60" height="46" fill="#000" stroke="#000" stroke-width="1.5"/>
+<text x="60.0" y="1303" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13" text-anchor="middle" fill="#fff">01</text>
+<text x="60.0" y="1321" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" fill="#fff">type</text>
+<rect x="90" y="1283" width="70" height="46" fill="#fff" stroke="#000" stroke-width="1.5"/>
+<text x="125.0" y="1303" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13" text-anchor="middle" fill="#000">01</text>
+<text x="125.0" y="1321" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" fill="#000">version</text>
+<rect x="160" y="1283" width="330" height="46" fill="#fff" stroke="#000" stroke-width="1.5"/>
+<text x="325.0" y="1303" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13" text-anchor="middle" fill="#000">fresh public key</text>
+<text x="325.0" y="1321" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" fill="#000">32</text>
+<rect x="490" y="1283" width="440" height="46" fill="#fff" stroke="#000" stroke-width="1.5"/>
+<text x="710.0" y="1303" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13" text-anchor="middle" fill="#000">signature of the device</text>
+<text x="710.0" y="1321" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" fill="#000">64</text>
+<text x="30" y="1349" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" text-anchor="start" fill="#000">The signature is made with the private key of the device. The phone checks it with the public key from the sticker.</text>
+<text x="30" y="1376" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="start" fill="#000">KEYSHARE   33 bytes   phone to device</text>
+<rect x="30" y="1388" width="60" height="46" fill="#000" stroke="#000" stroke-width="1.5"/>
+<text x="60.0" y="1408" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13" text-anchor="middle" fill="#fff">02</text>
+<text x="60.0" y="1426" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" fill="#fff">type</text>
+<rect x="90" y="1388" width="400" height="46" fill="#fff" stroke="#000" stroke-width="1.5"/>
+<text x="290.0" y="1408" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13" text-anchor="middle" fill="#000">fresh public key of the phone</text>
+<text x="290.0" y="1426" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" fill="#000">32</text>
+<text x="30" y="1461" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="start" fill="#000">DATA   1 + n + 16 bytes   both ways</text>
+<rect x="30" y="1473" width="60" height="46" fill="#000" stroke="#000" stroke-width="1.5"/>
+<text x="60.0" y="1493" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13" text-anchor="middle" fill="#fff">03</text>
+<text x="60.0" y="1511" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" fill="#fff">type</text>
+<rect x="90" y="1473" width="640" height="46" fill="#fff" stroke="#000" stroke-width="1.5"/>
+<text x="410.0" y="1493" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13" text-anchor="middle" fill="#000">the JSON message, locked</text>
+<text x="410.0" y="1511" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" fill="#000">n, up to 4096</text>
+<rect x="730" y="1473" width="160" height="46" fill="#fff" stroke="#000" stroke-width="1.5"/>
+<text x="810.0" y="1493" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13" text-anchor="middle" fill="#000">tag</text>
+<text x="810.0" y="1511" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" fill="#000">16</text>
+<text x="30" y="1549" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" text-anchor="start" fill="#000">Locked with ChaCha20-Poly1305. The nonce is a counter that both sides keep, so it is not sent. Each direction has its own key and counter.</text>
+<text x="30" y="1576" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="start" fill="#000">REJECT   4 bytes   device to phone   not locked</text>
+<rect x="30" y="1588" width="60" height="46" fill="#000" stroke="#000" stroke-width="1.5"/>
+<text x="60.0" y="1608" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13" text-anchor="middle" fill="#fff">04</text>
+<text x="60.0" y="1626" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" fill="#fff">type</text>
+<rect x="90" y="1588" width="120" height="46" fill="#fff" stroke="#000" stroke-width="1.5"/>
+<text x="150.0" y="1608" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13" text-anchor="middle" fill="#000">reason</text>
+<text x="150.0" y="1626" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" fill="#000">1</text>
+<rect x="210" y="1588" width="180" height="46" fill="#fff" stroke="#000" stroke-width="1.5"/>
+<text x="300.0" y="1608" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13" text-anchor="middle" fill="#000">seconds to wait</text>
+<text x="300.0" y="1626" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle" fill="#000">2</text>
+</svg>

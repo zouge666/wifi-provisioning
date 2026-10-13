@@ -21,6 +21,8 @@ node_modules/
 identity.json
 *.identity.json
 state/
+# recordings of the air show who talked to the device
+*.pcap
 
 # OS / editor
 .DS_Store

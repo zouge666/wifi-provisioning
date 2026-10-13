@@ -2,6 +2,8 @@
 
 Offline Wi-Fi provisioning for headless Linux devices.
 
+The design, a real run with photos and the trade-offs are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ## Setup
 
 Requires [uv](https://docs.astral.sh/uv/). Supports Python 3.10 and newer.
@@ -78,3 +80,14 @@ uvx --from segno==1.6.1 segno --scale 10 --error m -o sticker.png "http://10.42.
 ```
 
 The picture has the setup code in it. Keep it private, like the sticker. The steps on the phone are in [docs/TECHNICIAN.md](docs/TECHNICIAN.md).
+
+## Assumptions
+
+I do not know the real hardware of the devices, so I assume as little as I can:
+
+- The device runs Ubuntu with NetworkManager and has a Wi-Fi adapter that can make a hotspot.
+- I do not rely on a screen, a button, a light, a camera or Bluetooth on the device.
+- The device has no network the first time. It opens its own Wi-Fi after about 30 seconds.
+- The Wi-Fi network to join uses a password or is open. Enterprise Wi-Fi is not supported.
+
+The full list is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#6-assumptions).
