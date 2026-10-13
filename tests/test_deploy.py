@@ -7,8 +7,10 @@ from pathlib import Path
 import pytest
 
 from wifiprov.cli import _build_parser
+from wifiprov.device.networkmanager import AP_ADDRESS
 
-DEPLOY = Path(__file__).parent.parent / "deploy"
+ROOT = Path(__file__).parent.parent
+DEPLOY = ROOT / "deploy"
 
 
 def service_settings():
@@ -56,3 +58,15 @@ def test_the_install_script_is_valid_shell():
     script = DEPLOY / "install.sh"
     subprocess.run(["bash", "-n", str(script)], check=True)
     assert os.access(script, os.X_OK)
+
+
+def test_the_guides_use_the_real_address_and_button_names():
+    command = shlex.split(service_settings()["ExecStart"])
+    page = f"http://{AP_ADDRESS}:{_build_parser().parse_args(command[1:]).web_port}"
+    technician = (ROOT / "docs" / "TECHNICIAN.md").read_text(encoding="utf-8")
+    html = (ROOT / "src" / "wifiprov" / "web" / "index.html").read_text(encoding="utf-8")
+    assert page in (ROOT / "README.md").read_text(encoding="utf-8")
+    assert page in technician
+    for label in ("Not listed? Type its name", "Check result"):
+        assert f"**{label}**" in technician
+        assert label in html

@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
+<!-- Wi&#8209;Fi has a hyphen that does not break, so it stays on one line. -->
 <main>
   <header class="top">
     <span>wifiprov</span>
@@ -21,7 +22,7 @@
   </ol>
 
   <section id="view-sticker">
-    <h1>Add this device to a Wi-Fi network</h1>
+    <h1>Add this device to a Wi&#8209;Fi network</h1>
     <p>Scan the QR code on the device with your camera. If that does not open this page, paste the text printed next to it.</p>
     <form id="sticker-form" novalidate>
       <label for="sticker-text">Sticker text</label>
@@ -29,12 +30,12 @@
       <p class="error" id="sticker-error" role="alert" hidden></p>
       <button type="submit" id="connect">Connect</button>
     </form>
-    <p class="foot">This page comes from the device. Nothing leaves this Wi-Fi network, so your phone may say it has no internet.</p>
+    <p class="foot">This page comes from the device. Nothing leaves this Wi&#8209;Fi network, so your phone may say it has no internet.</p>
   </section>
 
   <section id="view-network" hidden>
     <h1>Choose the network for this device</h1>
-    <p>The Wi-Fi password is encrypted before it leaves this page.</p>
+    <p>The Wi&#8209;Fi password is encrypted before it leaves this page.</p>
     <ul id="networks" class="rows"></ul>
     <form id="join" novalidate hidden>
       <div id="name-field" hidden>
@@ -56,10 +57,10 @@
 
   <section id="view-sent" hidden>
     <h1 id="sent-title"></h1>
-    <p>To do that it leaves its own network, so this page loses contact. That is expected.</p>
+    <p>To do that it leaves its own network, so this page loses contact.</p>
     <ol class="notes">
-      <li><span>Switch your phone back to the hospital Wi-Fi.</span></li>
-      <li><span>If <code id="own-network"></code> appears in your Wi-Fi list again within a minute, joining failed. Connect to it and check the result.</span></li>
+      <li><span>Switch your phone back to the hospital Wi&#8209;Fi.</span></li>
+      <li><span>If <code id="own-network"></code> appears in your Wi&#8209;Fi list again within a minute, joining failed. Connect to it and check the result.</span></li>
     </ol>
     <p class="error" id="sent-error" role="alert" hidden></p>
     <button type="button" class="secondary" id="check">Check result</button>

@@ -67,12 +67,13 @@ function sentence(text: string): string {
 }
 
 // The reason a person can act on, for whatever went wrong.
+// Wi\u2011Fi has a hyphen that does not break, so it stays on one line.
 function explain(error: unknown): string {
   if (error instanceof TicketError) {
     return "That is not the text on the sticker. Check it and try again.";
   }
   if (error instanceof NotTheExpectedDevice) {
-    return "This is not the device on the sticker. Your phone may be connected to another device's Wi-Fi network.";
+    return "This is not the device on the sticker. Your phone may be connected to another device's Wi\u2011Fi network.";
   }
   if (error instanceof DeviceRefused) {
     if (error.reason === "auth_failed") {
@@ -86,7 +87,7 @@ function explain(error: unknown): string {
   }
   if (error instanceof TransportClosed) {
     const name = ticket === null ? "its own" : accessPointName(ticket.deviceId);
-    return `Cannot reach the device. Is your phone connected to the Wi-Fi network ${name}?`;
+    return `Cannot reach the device. Is your phone connected to the Wi\u2011Fi network ${name}?`;
   }
   if (error instanceof DeviceUnreachable) {
     return "The device did not answer. Try again.";
@@ -312,7 +313,7 @@ async function check(): Promise<void> {
   } catch (error) {
     if (error instanceof TransportClosed) {
       const own = ticket === null ? "its own network" : accessPointName(ticket.deviceId);
-      setText("sent-error", `Cannot reach the device. If ${own} is gone from your Wi-Fi list, the device has probably joined the network. If it is there, connect to it and check again.`);
+      setText("sent-error", `Cannot reach the device. If ${own} is gone from your Wi\u2011Fi list, the device has probably joined the network. If it is there, connect to it and check again.`);
     } else {
       setText("sent-error", explain(error));
     }

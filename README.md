@@ -54,3 +54,27 @@ committed, because the device has no Node. After a change in `web/src`:
 ```bash
 cd web && npm run build
 ```
+
+## On a device
+
+I tested this on Ubuntu 24.04 with NetworkManager. The Wi-Fi adapter must be able to make a hotspot. Run `scripts/check-hardware.sh` to check your computer.
+
+Install the service. You need the internet one time, to download the Python packages:
+
+```bash
+sudo deploy/install.sh
+```
+
+When the device has no network, it makes its own Wi-Fi for 10 minutes. The name is `wifiprov-` and the device ID. If the device already has a network, you can open it yourself:
+
+```bash
+sudo systemctl kill --kill-whom=main -s SIGUSR1 wifiprov-device
+```
+
+The text for the sticker is in `/var/lib/wifiprov/ticket.txt`. Only root can read it. The QR code on the sticker is a link to the page: `http://10.42.0.1:8080/#` and then this text. Copy the file to your computer, then make the QR code:
+
+```bash
+uvx --from segno==1.6.1 segno --scale 10 --error m -o sticker.png "http://10.42.0.1:8080/#$(cat ticket.txt)"
+```
+
+The picture has the setup code in it. Keep it private, like the sticker. The steps on the phone are in [docs/TECHNICIAN.md](docs/TECHNICIAN.md).
